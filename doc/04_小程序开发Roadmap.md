@@ -38,9 +38,9 @@ V2.0 按仓库现状重写：
 | ORM | FreeSql 3.5.311，PostgreSQL 驱动，JsonMap 扩展 | CodeFirst，`--init` 同步结构；实体小写属性名即列名 |
 | 主键 | `Guid` | `Guid.Empty` 保留给系统管理员 |
 | 时间列 | `long` Unix 秒，`created_at` / `updated_at` / `deleted_at` | 软删除是否真做，见阶段 0 决策 |
-| 缓存 | FreeRedis 1.5.5 | 会话、微信 token、以后的 nonce 与限流 |
+| 缓存 | FreeRedis 1.5.5 | 会话、微信 token、以后的限流 |
 | 定时任务 | FreeScheduler | 尚未引入，阶段 0 加 |
-| 日志 | log4net 3.3.2 | 阶段 0 做脱敏与级别调整 |
+| 日志 | log4net 3.3.2 | 保持现状 |
 | 小程序 | UniApp（Vue3 + TS + Pinia + vue-i18n） | 前身仓库现成代码迁入 `app/` |
 | 平台后台 | Vue3 + Vite + TS + Pinia + Vue Router + vue-i18n + Ant Design Vue | `backend/` 待建 |
 | 医生网页端 | 同上 | `doctor/` 延后，专用于复杂排牙 |
@@ -120,13 +120,12 @@ V2.0 按仓库现状重写：
 - `AddOpenApi()`，开发环境暴露 `/openapi/v1.json`。
 - 默认文化改 zh-Hans。
 - 密钥移入配置，生产用环境变量。
-- 签名 nonce 去重，容差收窄到 5 分钟。
-- 日志脱敏，`CodeException` 记 Warn。
-- RBAC 服务端强制：`[RequireModule]` 特性。
+
+RBAC 服务端强制、签名 nonce 去重、日志脱敏三项已于 2026-09-08 决定本期不做，见评审 §4.3 到 §4.5。
 
 ### 3.6 三端骨架
 
-- `app/`：按 `05_M0详细设计.md` §8.5 的迁移清单把前身仓库代码搬入，改请求封装适配 `App-RequestId` 头与 ±5 分钟容差；tab 从四项改五项；登录后按 `role` 分流。
+- `app/`：按 `05_M0详细设计.md` §8.5 的迁移清单把前身仓库代码搬入，改请求封装适配 `App-RequestId` 头；tab 从四项改五项；登录后按 `role` 分流。
 - `backend/`：Vite 脚手架、登录页、布局与菜单（对接 `admin/auth/current-user-modules`）、请求封装。
 - `doctor/`：不建，只在 nginx 留站点位置。
 - `docker/`：重写 `web.conf`，去掉 9998、WebSocket、MQTT；`dockerfile` 改多阶段构建；补 `db` 与 `redis` 的示例 compose。
@@ -138,7 +137,7 @@ V2.0 按仓库现状重写：
 - 上传一张图并用签名地址读回。
 - `backend/` 能登录并看到菜单。
 - `/healthz` 返回 PG 与 Redis 正常。
-- 第一批单元测试：签名、会话、软删除过滤、RBAC。
+- 第一批单元测试：签名、会话、软删除过滤。
 
 ### 3.8 分工
 
