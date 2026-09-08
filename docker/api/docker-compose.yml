@@ -1,0 +1,19 @@
+version: '3'
+services:
+
+
+
+  api:
+    container_name: api
+    image: chipmunk/api
+    build:
+      context: ./
+      dockerfile: ./dockerfile
+    restart: always
+    network_mode: "host"
+    environment:
+     - TZ=Asia/Shanghai
+    volumes:
+     - /opt/chipmunk/api/log:/opt/chipmunk/api/log
+     - /opt/chipmunk/api/storage:/opt/chipmunk/api/storage
+     - /opt/chipmunk/api/appsettings.json:/opt/chipmunk/api/appsettings.json

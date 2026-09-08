@@ -1,0 +1,4 @@
+FROM  mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /opt/chipmunk/api
+ADD ./bin /opt/chipmunk/api
+CMD ["dotnet","Admin.Api.dll"]

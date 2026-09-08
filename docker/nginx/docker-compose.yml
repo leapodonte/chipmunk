@@ -1,0 +1,18 @@
+version: '3'
+services:
+
+  nginx:
+    container_name: nginx
+    image: nginx:latest
+    environment:
+      - SERVICE_IGNORE=true
+    restart: always
+    volumes:
+      - /opt/chipmunk/nginx/www:/var/www
+      - /opt/chipmunk/nginx/log:/var/log/nginx
+      - /opt/chipmunk/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /opt/chipmunk/nginx/mime.types:/etc/nginx/mime.types
+      - /opt/chipmunk/nginx/sites:/etc/nginx/sites-enabled
+      - /opt/chipmunk/nginx/ssl:/etc/nginx/ssl
+      - /opt/chipmunk/nginx/stream:/etc/nginx/stream
+    network_mode: "host"
