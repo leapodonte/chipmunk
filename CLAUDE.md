@@ -18,10 +18,13 @@ dotnet build api/Admin.sln
 dotnet run --project api/Admin.Api
 
 # 初始化/同步数据库表结构并写入种子数据（数据库不存在时会自动创建）
+# ⚠️ 此命令仅供人工执行，见下方约定
 dotnet run --project api/Admin.Api -- --init
 ```
 
 运行依赖（见 `api/Admin.Api/appsettings.json`）：PostgreSQL `127.0.0.1:5432`（数据库 `admin`）、Redis `127.0.0.1:6379`。`--init` 会写入 `admin` 账号（密码 `Admin@12345`）、模块、角色和系统配置。
+
+> **约定：`--init`（数据库初始化）必须由人工执行，Claude 不得擅自运行**——包括调试、验证、跑冒烟测试等任何场景。该命令会同步全部实体表结构并写入种子数据，可能改动现有数据库。需要初始化数据库时，只需提示用户手动执行上述命令，不要代跑。
 
 目前没有测试项目。
 
