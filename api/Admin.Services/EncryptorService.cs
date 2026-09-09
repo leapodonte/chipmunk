@@ -10,24 +10,42 @@ namespace Admin.Services
     public class EncryptorService
     {
         /// <summary>
-        /// 用于内部签名的公共Key
+        /// 用于内部签名的公共Key（配置项 Security:SignKey）
         /// </summary>
-        private const string SignKey = "5103F8C2-3BF3-41FA-BF83-13F3777D6A0C";
+        private readonly string SignKey;
 
         /// <summary>
-        /// 用于客户端侧签名密码的Key
+        /// 用于客户端侧签名密码的Key（配置项 Security:ClientPwdKey）
         /// </summary>
-        private const string ClientPwdKey = "3F4A8D0F-602D-47B1-8180-76246DAAC4A1";
+        private readonly string ClientPwdKey;
 
         /// <summary>
-        /// 用于服务端侧签名密码的Key
+        /// 用于服务端侧签名密码的Key（配置项 Security:ServerPwdKey）
         /// </summary>
-        private const string ServerPwdKey = "6BC70DE7-2F7E-4993-8CF2-35F406F41C29";
+        private readonly string ServerPwdKey;
 
         /// <summary>
-        /// 用于前端请求签名的公共Key
+        /// 用于前端请求签名的公共Key（配置项 Security:RequestKey）
         /// </summary>
-        private const string RequestKey = "883F5AB8-F432-4A46-A938-BE620BC59703";
+        private readonly string RequestKey;
+
+        /// <summary>
+        /// 各密钥从 appsettings.json 的 Security 节读取，构造时统一校验
+        /// </summary>
+        public EncryptorService(string? signKey, string? clientPwdKey, string? serverPwdKey, string? requestKey)
+        {
+            SignKey = RequireKey(signKey, "Security:SignKey");
+            ClientPwdKey = RequireKey(clientPwdKey, "Security:ClientPwdKey");
+            ServerPwdKey = RequireKey(serverPwdKey, "Security:ServerPwdKey");
+            RequestKey = RequireKey(requestKey, "Security:RequestKey");
+        }
+
+        private static string RequireKey(string? value, string name)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException($"加密服务初始化失败: 缺少配置项 {name}");
+            return value;
+        }
 
 
 

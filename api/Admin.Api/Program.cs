@@ -40,7 +40,11 @@ if (args.Length > 0)
             };
             fsql.UseJsonMap();
 
-            SystemService svr = new SystemService(fsql, new EncryptorService());
+            SystemService svr = new SystemService(fsql, new EncryptorService(
+                cfg["Security:SignKey"],
+                cfg["Security:ClientPwdKey"],
+                cfg["Security:ServerPwdKey"],
+                cfg["Security:RequestKey"]));
             await svr.InitSystemAsync();
             Console.WriteLine("初始化完成");
         }
@@ -110,7 +114,15 @@ else
     });
 
     builder.Services.AddSingleton<AdminLogService>();
-    builder.Services.AddSingleton<EncryptorService>();
+    builder.Services.AddSingleton(sp =>
+    {
+        var cfg = sp.GetRequiredService<IConfiguration>();
+        return new EncryptorService(
+            cfg["Security:SignKey"],
+            cfg["Security:ClientPwdKey"],
+            cfg["Security:ServerPwdKey"],
+            cfg["Security:RequestKey"]);
+    });
     builder.Services.AddScoped<SystemOptionService>();
     builder.Services.AddScoped<AccountService>();
     builder.Services.AddScoped<AdminSessionService>();

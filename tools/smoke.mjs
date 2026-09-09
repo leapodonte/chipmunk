@@ -6,13 +6,19 @@
  * 1. PostgreSQL / Redis 已启动，且已执行 dotnet run --project api/Admin.Api -- --init
  * 2. API 已运行：dotnet run --project api/Admin.Api（默认 http://localhost:5000）
  *
- * 用法：node tools/smoke.mjs [baseUrl]
+ * 用法：密钥通过环境变量提供（与服务端 appsettings.json 的 Security 节保持一致）：
+ *   SMOKE_REQUEST_KEY / SMOKE_CLIENT_PWD_KEY node tools/smoke.mjs [baseUrl]
  */
 import crypto from 'node:crypto'
 
 const BASE = process.argv[2] || process.env.SMOKE_BASE || 'http://localhost:5000'
-const REQUEST_KEY = '883F5AB8-F432-4A46-A938-BE620BC59703'
-const CLIENT_PWD_KEY = '3F4A8D0F-602D-47B1-8180-76246DAAC4A1'
+const REQUEST_KEY = process.env.SMOKE_REQUEST_KEY
+const CLIENT_PWD_KEY = process.env.SMOKE_CLIENT_PWD_KEY
+
+if (!REQUEST_KEY || !CLIENT_PWD_KEY) {
+  console.error('缺少环境变量 SMOKE_REQUEST_KEY / SMOKE_CLIENT_PWD_KEY（值与服务端 appsettings.json 的 Security 节一致）')
+  process.exit(1)
+}
 
 let adminSession = ''
 let appSession = ''
