@@ -57,6 +57,7 @@ namespace Admin.Services
                 user.updated_at= DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 await _fsql.Update<User>()
                     .Set(a=>a.updated_at, user.updated_at)
+                    .Where(a => a.id == user.id)
                     .ExecuteAffrowsAsync(cancellationToken);
             }
 

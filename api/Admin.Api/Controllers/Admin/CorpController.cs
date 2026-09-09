@@ -65,6 +65,7 @@ namespace Admin.Api.Controllers.Admin
         /// <summary>
         /// 获取企业信息
         /// </summary>
+        [HttpPost("get")]
         public async Task<Response<GetCorpResponse>> GetAsync(CancellationToken cancellationToken)
         {
             var request = await this.GetRequestAsync<GetCorpRequest>();

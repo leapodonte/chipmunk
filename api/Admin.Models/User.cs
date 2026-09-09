@@ -44,8 +44,8 @@ namespace Admin.Models
     /// </summary>
     [Table(Name = "user")]
     [Index("{tablename}_idx_1", "name ASC,deleted_at ASC", IsUnique = true)]
-    [Index("{tablename}_idx_2", "open_id ASC,deleted_at ASC", IsUnique = true)]
-    [Index("{tablename}_idx_3", "unique_id ASC,deleted_at ASC", IsUnique = true)]
+    [Index("{tablename}_idx_2", "openid ASC,deleted_at ASC", IsUnique = true)]
+    [Index("{tablename}_idx_3", "unionid ASC,deleted_at ASC", IsUnique = true)]
     public class User
     {
         /// <summary>

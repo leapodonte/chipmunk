@@ -186,7 +186,8 @@ namespace Admin.Services
 
         public async Task<string?> GetAccessTokenAsync(string userId, CancellationToken cancellationToken)
         {
-            string accessToken=await _redis.GetAsync(KEY_AccessToken + userId);
+            string key = KEY_AccessToken + userId;
+            string accessToken=await _redis.GetAsync(key);
             if(!string.IsNullOrEmpty(accessToken))
             {
                 return accessToken;
@@ -195,8 +196,8 @@ namespace Admin.Services
             using WechatClient client = new WechatClient(_appId, _appSecret);
             var rsp = await client.GetAccessTokenAsync(cancellationToken,false);
             
-            int expires = Math.Min(0, rsp.expires_in - 300);
-            await _redis.SetAsync(KEY_AccessToken, rsp.access_token, expires);
+            int expires = Math.Max(0, rsp.expires_in - 300);
+            await _redis.SetAsync(key, rsp.access_token, expires);
             return rsp.access_token;
         }
 

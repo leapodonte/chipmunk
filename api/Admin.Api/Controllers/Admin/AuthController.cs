@@ -58,7 +58,7 @@ namespace Admin.Api.Controllers.Admin
             AdminSession? session = this.GetSession();
             if (session == null)
             {
-                throw new CodeException(401, _localizer["InvalidStream"]);
+                throw new CodeException(401, _localizer["InvalidSession"]);
             }
 
 
@@ -74,7 +74,7 @@ namespace Admin.Api.Controllers.Admin
             var session = this.GetSession();
             if (session == null)
             {
-                throw new CodeException(401, _localizer["InvalidStream"]);
+                throw new CodeException(401, _localizer["InvalidSession"]);
             }
 
             return Response<CurrentUserModulesResponse>.Create(new CurrentUserModulesResponse { modules = session.modules });
@@ -83,12 +83,13 @@ namespace Admin.Api.Controllers.Admin
         /// <summary>
         /// 获取当前登录用户的角色权限
         /// </summary>
+        [HttpPost("current-user-roles")]
         public async Task<Response<CurrentUserRolesResponse>> CurrentUserRolesAsync(CancellationToken cancellationToken)
         {
             var session = this.GetSession();
             if (session == null)
             {
-                throw new CodeException(401, _localizer["InvalidStream"]);
+                throw new CodeException(401, _localizer["InvalidSession"]);
             }
 
             var response =await _sessionService.CurrentUserRolesAsync(session,cancellationToken);
@@ -106,7 +107,7 @@ namespace Admin.Api.Controllers.Admin
             var session = this.GetSession();
             if (session == null)
             {
-                throw new CodeException(401, _localizer["InvalidStream"]);
+                throw new CodeException(401, _localizer["InvalidSession"]);
             }
             await _sessionService.ChangePassword(session, request, cancellationToken);
             return Response<object>.Create(0);

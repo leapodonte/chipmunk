@@ -51,6 +51,7 @@ namespace Admin.Services
 
             await _fsql.Update<Models.Account>()
                 .Set(a => a.updated_at, DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                .Where(a => a.id == acc.id)
                 .ExecuteAffrowsAsync(cancellationToken);
 
 
