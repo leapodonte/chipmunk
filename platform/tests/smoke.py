@@ -76,6 +76,15 @@ req=urllib.request.Request(grant['uploadUrl'],data=multipart,headers={'Content-T
 with urllib.request.urlopen(req,timeout=30) as response: uploaded=json.load(response)['data']
 assert uploaded['size']==len(image)
 with urllib.request.urlopen(uploaded['url'],timeout=30) as response: assert response.read()==image
+raw_grant=call('POST','/api/v1/media/upload-token',{'scene':'avatar','ext':'png'},token)
+bad=urllib.request.Request(raw_grant['uploadUrl'],data=b'not-an-image',method='PUT')
+try: urllib.request.urlopen(bad,timeout=30); raise AssertionError('invalid image accepted')
+except urllib.error.HTTPError as e: assert e.code==400
+raw=urllib.request.Request(raw_grant['uploadUrl'],data=image,headers={'Content-Type':'image/png'},method='PUT')
+with urllib.request.urlopen(raw,timeout=30) as response: raw_result=json.load(response)['data']
+assert raw_result['size']==len(image)
+expired=raw_result['url'].split('?')[0]+'?expires=1&signature=expired'
+call('GET',expired,expected=403)
 call('GET','/api/v1/media/'+uploaded['mediaId']+'/url',token=other,expected=404)
 call('POST','/api/v1/ai/simulations',{'imageKey':grant['objectKey']},other,expected=404)
 call('GET',uploaded['url'].replace('signature=','signature=bad'),expected=403)
@@ -83,6 +92,10 @@ req=urllib.request.Request(grant['uploadUrl'],data=image,method='PUT')
 try: urllib.request.urlopen(req,timeout=30); raise AssertionError('overwrite allowed')
 except urllib.error.HTTPError as e: assert e.code==409
 ok('disk upload, byte equality, signatures and private ownership')
+chunked=urllib.request.Request(BASE+'/api/v1/users/me/questionnaire',data=iter([b'{"answers":{"q":"',b'x'*65536,b'"}}']),headers={'Content-Type':'application/json','Authorization':'Bearer '+token},method='POST')
+try: urllib.request.urlopen(chunked,timeout=30); raise AssertionError('oversized chunked JSON accepted')
+except urllib.error.HTTPError as e: assert e.code==413
+ok('chunked JSON request bound')
 task=call('POST','/api/v1/ai/simulations',{'imageKey':grant['objectKey']},token)
 result=call('GET','/api/v1/ai/simulations/'+task['taskId'],token=token); assert result['isMock']
 time.sleep(3)
