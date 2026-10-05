@@ -1,0 +1,30 @@
+{
+  "ant-design-icons": {
+    "repository": "ant-design/ant-design-icons",
+    "path": "LICENSE",
+    "blobSha": "dfe5c2183e82554ef991024afb81baac82c7e10a",
+    "source": "https://github.com/ant-design/ant-design-icons/blob/master/LICENSE",
+    "license": "MIT"
+  },
+  "rolldown": {
+    "repository": "rolldown/rolldown",
+    "path": "LICENSE",
+    "blobSha": "afc0cdbabfb99ed4030bf9be2b852977f1ed72a0",
+    "source": "https://github.com/rolldown/rolldown/blob/main/LICENSE",
+    "license": "MIT"
+  },
+  "vue-devtools": {
+    "repository": "vuejs/vue-devtools",
+    "path": "LICENSE",
+    "blobSha": "de5fa77c8afb13ae0da0dd608c6f759c32ab1985",
+    "source": "https://github.com/vuejs/devtools-v6/blob/main/LICENSE",
+    "license": "MIT"
+  },
+  "array-tree-filter": {
+    "repository": "afc163/array-tree-filter",
+    "path": "LICENSE",
+    "blobSha": "639216d0674586baf24b8607f5123865b9cafb53",
+    "source": "https://github.com/afc163/array-tree-filter/blob/main/LICENSE",
+    "license": "MIT"
+  }
+}

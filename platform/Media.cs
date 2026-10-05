@@ -7,6 +7,23 @@ namespace Chipmunk.Platform;
 public static class Media
 {
     public const int MaximumBytes = 10 * 1024 * 1024;
+    private static readonly SemaphoreSlim Uploads = new(2, 2);
+    // 在读取正文、取得数据库连接或分配解码内存之前限制并行上传。
+    public static IDisposable? AcquireUpload(HttpContext context)
+    {
+        if (context.Request.Method == "GET") return null;
+        if (!Uploads.Wait(0))
+        {
+            context.Response.Headers.RetryAfter = "2";
+            throw new ApiError(429, "上传繁忙，请稍后重试", "Upload capacity is busy; retry shortly");
+        }
+        return new UploadLease();
+    }
+    private sealed class UploadLease : IDisposable
+    {
+        private int released;
+        public void Dispose() { if (Interlocked.Exchange(ref released, 1) == 0) Uploads.Release(); }
+    }
     private static string Sign(IConfiguration config, string action, string id, long expires) => Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(Auth.Secret(config, "MEDIA_SIGNING_KEY")), Encoding.UTF8.GetBytes($"{action}:{id}:{expires}"))).ToLowerInvariant();
     private static string Base(IConfiguration config) => (config["PUBLIC_URL"] ?? "https://app.smilelab.ai").TrimEnd('/');
     public static string Download(IConfiguration config, JsonObject media)
@@ -20,12 +37,14 @@ public static class Media
     }
     public static async Task<JsonObject> ByKey(Store store, User user, string key)
     {
-        var media = (await store.List(user, "media")).FirstOrDefault(m => m["objectKey"]?.GetValue<string>() == key) ?? throw new ApiError(404, "文件不存在", "Object not found");
+        var rows = await store.Rows("SELECT body::text FROM platform_resource WHERE tenant_id=@tenant AND clinic_id=@clinic AND owner_id=@user AND kind='media' AND body->>'objectKey'=@key", ("tenant", user.Tenant), ("clinic", user.Clinic), ("user", user.Id), ("key", key));
+        if (rows.Count != 1) throw new ApiError(404, "文件不存在", "Object not found");
+        var media = JsonNode.Parse(rows[0][0])!.AsObject();
         Ready(media); return media;
     }
     public static async Task<JsonObject> Grant(Store store, IConfiguration config, User user, JsonObject body)
     {
-        var scene = Auth.Required(body, "scene"); var ext = body["ext"]?.GetValue<string>()?.ToLowerInvariant() ?? "jpg";
+        var scene = Auth.Required(body, "scene"); var ext = Validation.Text(body, "ext", 8, false).ToLowerInvariant(); if (ext == "") ext = "jpg";
         if (scene is not ("checkin_photo" or "ai_photo" or "avatar") || ext is not ("jpg" or "jpeg" or "png" or "webp")) throw new ApiError(400, "图片用途或扩展名无效", "Unsupported scene or extension");
         await store.Rate("upload:" + user.Id, 100, 86400);
         var root = config["MEDIA_ROOT"] ?? "/data/objects";
@@ -35,7 +54,8 @@ public static class Media
         if (long.Parse(quota[0][0]) >= 100L * 1024 * 1024) throw new ApiError(413, "演示用户文件容量已达上限", "Demo user storage quota is 100 MiB");
         var id = "media_" + Guid.NewGuid().ToString("N"); var key = $"chipmunk-private/{user.Tenant}/{user.Id}/{scene}/{id}.{ext}";
         var expires = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 300;
-        await store.Add(user, "media", new JsonObject { ["objectKey"] = key, ["scene"] = scene, ["ext"] = ext, ["uploaded"] = false, ["size"] = 0, ["expires"] = expires }, id: id);
+        await store.Add(user, "media", new JsonObject { ["objectKey"] = key, ["scene"] = scene, ["ext"] = ext, ["uploaded"] = false, ["size"] = 0, ["expires"] = expires,
+            ["uploaderId"] = user.Id, ["createdAt"] = DateTimeOffset.UtcNow.ToString("O"), ["storageClass"] = "private", ["original"] = true }, id: id);
         var signature = Sign(config, "upload", id, expires);
         var policy = Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["expiration"] = DateTimeOffset.FromUnixTimeSeconds(expires).ToString("O"), ["conditions"] = new JsonArray(new JsonObject { ["key"] = key }, new JsonArray("content-length-range", 1, MaximumBytes)) }.ToJsonString()));
         return new JsonObject { ["uploadUrl"] = $"{Base(config)}/storage/objects/{id}?expires={expires}&signature={signature}", ["objectKey"] = key,
@@ -47,7 +67,7 @@ public static class Media
         var action = context.Request.Method == "GET" ? "read" : "upload";
         if (!long.TryParse(context.Request.Query["expires"], out var expiry) || expiry <= DateTimeOffset.UtcNow.ToUnixTimeSeconds() || !Auth.Equal(Sign(config, action, id, expiry), context.Request.Query["signature"].ToString())) throw new ApiError(403, "文件签名无效或已过期", "Invalid or expired object signature");
         await store.Lock("media:" + id);
-        var rows = await store.Rows("SELECT r.body::text,u.id,u.tenant_id,u.clinic_id,u.nickname,u.phone FROM platform_resource r JOIN platform_user u ON r.owner_id=u.id WHERE r.id=@id AND r.kind='media'", ("id", id));
+        var rows = await store.Rows("SELECT r.body::text,u.id,r.tenant_id,r.clinic_id,u.nickname,u.phone FROM platform_resource r JOIN platform_user u ON r.owner_id=u.id AND r.tenant_id=u.tenant_id WHERE r.id=@id AND r.kind='media'", ("id", id));
         if (rows.Count == 0) throw new ApiError(404, "文件不存在", "Object not found");
         var r = rows[0]; var media = JsonNode.Parse(r[0])!.AsObject(); var user = new User(r[1], r[2], r[3], r[4], r[5]);
         var root = Path.GetFullPath(config["MEDIA_ROOT"] ?? "/data/objects");
@@ -76,11 +96,24 @@ public static class Media
             : ext == "png" ? bytes.Length >= 24 && bytes.AsSpan(0,8).SequenceEqual(new byte[] {137,80,78,71,13,10,26,10})
             : bytes.Length >= 16 && Encoding.ASCII.GetString(bytes,0,4) == "RIFF" && Encoding.ASCII.GetString(bytes,8,4) == "WEBP";
         if (!valid) throw new ApiError(400, "图片格式与扩展名不匹配", "Image signature does not match extension");
+        var dimensions = ImageValidation.Decode(bytes);
         var mime = ext == "png" ? "image/png" : ext == "webp" ? "image/webp" : "image/jpeg";
         Directory.CreateDirectory(root); var temporary = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try { await File.WriteAllBytesAsync(temporary, bytes, context.RequestAborted); File.Move(temporary, filePath, true); }
+        var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        try
+        {
+            await File.WriteAllBytesAsync(temporary, bytes, context.RequestAborted);
+            if (File.Exists(filePath))
+            {
+                var existing = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(filePath, context.RequestAborted))).ToLowerInvariant();
+                if (existing != sha) throw new ApiError(409, "已存在不同的原始文件，不能覆盖", "Different original bytes already exist; overwrite is forbidden");
+            }
+            else { File.Move(temporary, filePath, false); context.Items["media.created.file"] = filePath; }
+        }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
-        media["uploaded"] = true; media["size"] = bytes.Length; media["sha256"] = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(); media["contentType"] = mime;
+        media["uploaded"] = true; media["size"] = bytes.Length; media["sha256"] = sha; media["contentType"] = mime;
+        media["width"] = dimensions.Width; media["height"] = dimensions.Height;
+        media["uploadedAt"] = DateTimeOffset.UtcNow.ToString("O");
         await store.Update(user, media); await store.Audit(user, context, "media.uploaded", id);
         return Results.Json(new { code = 0, message = "ok", data = new { objectKey = media["objectKey"]!.GetValue<string>(), mediaId = id, size = bytes.Length, sha256 = media["sha256"]!.GetValue<string>(), url = Download(config, media) } });
     }

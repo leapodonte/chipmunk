@@ -1,6 +1,7 @@
 """从已实现路由构建前端联调契约；不包含真实密钥。"""
 import json
 from pathlib import Path
+from dso_openapi import extend
 
 paths = {}
 def add(method, path, summary, fields=None, public=False):
@@ -66,5 +67,26 @@ paths['/storage/objects/{id}']={
     'get':{'summary':'有效签名URL下载私有图片，支持Range','security':[],'parameters':storage_params,'responses':{'200':{'description':'原始图片','content':{'image/png':{'schema':{'type':'string','format':'binary'}},'image/jpeg':{'schema':{'type':'string','format':'binary'}},'image/webp':{'schema':{'type':'string','format':'binary'}}}},'403':{'description':'无效签名'}}}}
 schemas['Envelope']={'type':'object','required':['code','message','data'],'properties':{'code':{'type':'integer'},'message':{'type':'string'},'data':{'nullable':True,'description':'由各接口定义返回类型'}}}
 document={'openapi':'3.0.3','info':{'title':'Smilelab 花栗鼠小程序开发API','version':'0.1.0','description':'开发演示环境。AI返回原图占位，SMS不发送；医疗数据不进入Odoo。'},'servers':[{'url':'https://app.smilelab.ai'}],'paths':paths,'components':{'securitySchemes':{'bearerAuth':{'type':'http','scheme':'bearer'}},'schemas':schemas}}
+extend(paths, schemas)
+from orders_openapi import extend as extend_orders
+extend_orders(paths, schemas)
+document['info']['version'] = '0.3.0'
+document['info']['title'] = 'Smilelab 花栗鼠小程序与DSO开发API'
+def remove_empty_required(value):
+    if isinstance(value, dict):
+        if value.get('required') == []:
+            del value['required']
+        for child in value.values():
+            remove_empty_required(child)
+    elif isinstance(value, list):
+        for child in value:
+            remove_empty_required(child)
+remove_empty_required(document)
 Path(__file__).resolve().parents[1].joinpath('platform/openapi.json').write_text(json.dumps(document,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 Path(__file__).resolve().parents[1].joinpath('platform/DeveloperGuide.md').write_text(Path(__file__).resolve().parents[1].joinpath('doc/Smilelab小程序API开发文档.md').read_text(encoding='utf-8'),encoding='utf-8')
+
+root = Path(__file__).resolve().parents[1]
+guide = root.joinpath('platform/DeveloperGuide.md')
+guide.write_text(guide.read_text(encoding='utf-8') + '\n\n---\n\n' + root.joinpath('doc/Smilelab_DSO开发接口与工作流.md').read_text(encoding='utf-8'), encoding='utf-8')
+
+guide.write_text(guide.read_text(encoding='utf-8') + '\n\n---\n\n' + root.joinpath('doc/Smilelab共享订单开发文档.md').read_text(encoding='utf-8'), encoding='utf-8')

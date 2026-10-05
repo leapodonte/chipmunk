@@ -1,0 +1,14 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+type Tooth = { tooth: number; finding?: string };
+const props = defineProps<{ modelValue: Tooth[]; disabled?: boolean }>();
+const emit = defineEmits<{ 'update:modelValue': [Tooth[]] }>();
+const { t } = useI18n(); const primary = ref(false); const selected = ref<number | null>(null);
+const quadrants = computed(() => primary.value ? [5, 6, 8, 7] : [1, 2, 4, 3]);
+const numbers = (quadrant: number, index: number) => Array.from({ length: primary.value ? 5 : 8 }, (_, i) => quadrant * 10 + i + 1).sort((a, b) => index % 2 === 0 ? b - a : a - b);
+const finding = computed({ get: () => props.modelValue.find(x => x.tooth === selected.value)?.finding ?? '', set: (value: string) => { if (!selected.value) return; const remaining = props.modelValue.filter(x => x.tooth !== selected.value); emit('update:modelValue', [...remaining, { tooth: selected.value, finding: value }].sort((a, b) => a.tooth - b.tooth)) } });
+function remove() { emit('update:modelValue', props.modelValue.filter(x => x.tooth !== selected.value)); selected.value = null }
+</script>
+<template><div class="tooth-chart"><div class="surface-title"><strong>{{ t('patients.teeth') }}</strong><a-segmented v-model:value="primary" :options="[{ label: t('patients.permanent'), value: false }, { label: t('patients.primary'), value: true }]" /></div><div class="tooth-quadrants"><div v-for="(q, index) in quadrants" :key="q" class="tooth-quadrant"><button v-for="number in numbers(q, index)" :key="number" type="button" :class="['tooth-button', { selected: selected === number, marked: modelValue.some(x => x.tooth === number) }]" :aria-label="t('patients.tooth') + ' ' + number" :aria-pressed="selected === number" @click="selected = number">{{ number }}</button></div></div><div v-if="selected" class="tooth-detail"><a-form-item :label="t('patients.finding') + ' · ' + selected"><a-input v-model:value="finding" :disabled="disabled" :maxlength="1000" /></a-form-item><a-button v-if="!disabled" size="small" @click="remove">{{ t('patients.removeTooth') }}</a-button></div></div></template>
+<style scoped>.tooth-chart{border:1px solid #e5ece7;border-radius:10px;padding:18px;margin-bottom:18px}.tooth-quadrants{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}.tooth-quadrant{display:flex;gap:4px;justify-content:center}.tooth-button{border:1px solid #d9e6dd;border-radius:8px;background:#fff;color:#5d7c6d;min-width:28px;height:40px;font-size:11px;cursor:pointer}.tooth-button.marked{background:#e0efe6;border-color:#a4c2af;color:#205d42}.tooth-button.selected{outline:2px solid #197a71;outline-offset:1px}.tooth-detail{margin-top:20px}@media(max-width:600px){.tooth-chart{padding:12px}.tooth-quadrants{gap:10px 8px}.tooth-quadrant{gap:2px}.tooth-button{min-width:22px;height:34px;font-size:10px}}</style>
