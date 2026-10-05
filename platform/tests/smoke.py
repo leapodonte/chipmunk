@@ -69,7 +69,7 @@ assert len(call('GET','/api/v1/posts/search?keyword=science',token=token))==1; o
 call('POST','/api/v1/media/upload-token',{'scene':'ai_photo','ext':'../../php'},token,expected=400)
 grant=call('POST','/api/v1/media/upload-token',{'scene':'ai_photo','ext':'png'},token)
 call('POST','/api/v1/ai/simulations',{'imageKey':grant['objectKey']},token,expected=409)
-image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5e0AAAAASUVORK5CYII=')
+image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
 boundary='smoke-'+uuid.uuid4().hex
 multipart=(f'--{boundary}\r\nContent-Disposition: form-data; name="key"\r\n\r\n{grant["objectKey"]}\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="test.png"\r\nContent-Type: image/png\r\n\r\n').encode()+image+f'\r\n--{boundary}--\r\n'.encode()
 req=urllib.request.Request(grant['uploadUrl'],data=multipart,headers={'Content-Type':'multipart/form-data; boundary='+boundary},method='POST')
@@ -98,8 +98,11 @@ except urllib.error.HTTPError as e: assert e.code==413
 ok('chunked JSON request bound')
 task=call('POST','/api/v1/ai/simulations',{'imageKey':grant['objectKey']},token)
 result=call('GET','/api/v1/ai/simulations/'+task['taskId'],token=token); assert result['isMock']
-time.sleep(3)
-result=call('GET','/api/v1/ai/simulations/'+task['taskId'],token=token); assert result['status']=='done' and result['isMock'] and '未进行AI' in result['resultText']
+for attempt in range(30):
+    result=call('GET','/api/v1/ai/simulations/'+task['taskId'],token=token)
+    if result['jobStatus']=='succeeded': break
+    time.sleep(1)
+assert result['status']=='done' and result['isMock'] and '未进行AI' in result['resultText']
 call('GET','/api/v1/ai/simulations/'+task['taskId'],token=other,expected=404); ok('explicit mock AI and task ownership')
 messages=call('GET','/api/v1/messages',token=token); assert messages
 call('POST','/api/v1/messages/'+messages[0]['id']+'/read',{},other,expected=404)
@@ -107,7 +110,8 @@ call('POST','/api/v1/messages/'+messages[0]['id']+'/read',{},token)
 call('POST','/api/v1/messages/read-all',{},token)
 assert all(x['read'] for x in call('GET','/api/v1/messages',token=token)); ok('private messages')
 call('POST','/api/v1/memberships/open',{},token,expected=501)
-for path in ['appointments/mine','patients/me/records','reports/mine','coupons/mine','mall/products']: assert call('GET','/api/v1/'+path,token=token)==[]
+for path in ['appointments/mine','patients/me/records']: assert call('GET','/api/v1/'+path,token=token)==[]
+for path in ['reports/mine','coupons/mine','mall/products']: assert call('GET','/api/v1/'+path,token=token)==[]
 ok('reserved feature behavior')
 consultation=call('POST','/api/v1/consultations',{},token)
 for attempt in range(15):
