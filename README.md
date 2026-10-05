@@ -24,7 +24,7 @@ flowchart LR
   ERP --> ODB[(Odoo PostgreSQL)]
 ```
 
-临床档案、医生授权、照片和 AI 作业归平台；Odoo 接收商业引用，承担 CRM、销售、采购、库存、HR 和会计模块。当前仅新建线索单向同步，阶段及跟进不双向同步。财务本地化和真实业务配置仍需另行准备。
+临床档案、医生授权、照片和 AI 作业归平台；Odoo 接收商业引用，承担 CRM、销售、采购、库存、HR 和会计模块。新建线索和只读订单快照单向同步，临床正文不导出；线索阶段及跟进不双向同步。财务本地化和真实业务配置仍需另行准备。
 
 ## 源码与开发
 
@@ -53,10 +53,11 @@ python platform/tests/odoo_integration.py
 - [小程序 API 开发文档](doc/Smilelab小程序API开发文档.md)
 - [复用项目、许可与组件决策](doc/DSO复用项目评估与组件决策.md)
 - [单一订单与患者/销售/制造/质检工作流](doc/Smilelab共享订单开发文档.md)
+- [Forgejo 推送自动发布](doc/Smilelab自动部署.md)
 - [容量采样与运行边界](doc/Smilelab_DSO容量与运行边界.md)
 - [交付、SSH 管理与后续计划](doc/Smilelab_DSO交付与后续计划.md)
 - [第三方许可说明](THIRD_PARTY_NOTICES.md)
 
 基础设施由独立 `dcad-infra` 仓库管理 Compose、Caddy、发布与备份；不能直接改服务器配置。部署从已测试的产品提交打包，保存旧数据库、文件、源码及镜像后升级。平台 API 和 Odoo 不发布主机端口，数据库不进入反向代理网络。
 
-恢复工具只在临时目标验证：`tools/verify-backup.py` 校验两库恢复及快照文件；`tools/verify-stack-restore.py --snapshot <完整快照目录>` 从快照启动完整隔离 API/Odoo 栈，检查管理员登录、五个员工角色、商业桥接、工作台和媒体字节哈希。当前验证在同一 VPS，不能替代异地备份或替代主机演练。
+恢复工具只在临时目标验证：`tools/verify-backup.py` 校验两库恢复及快照文件；`tools/verify-stack-restore.py --snapshot <完整快照目录>` 从快照启动完整隔离 API/Odoo 栈，检查管理员登录、八个员工角色、商业桥接、工作台、订单历程和媒体字节哈希。当前验证在同一 VPS，不能替代异地备份或替代主机演练。

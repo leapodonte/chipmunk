@@ -1,0 +1,52 @@
+name: Smilelab validate and deploy
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+
+# 升级不能中途取消；服务端另有发布锁和过期 main 提交保护。
+concurrency:
+  group: smilelab-${{ forgejo.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    runs-on: smilelab-ci
+    timeout-minutes: 35
+    steps:
+      - uses: https://github.com/actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate SDK, contract, platform, browser and real Odoo
+        shell: bash
+        run: bash tools/ci-smilelab.sh
+      - name: Publish validated main image
+        if: forgejo.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          SMILELAB_PUBLISH_KEY: ${{ secrets.SMILELAB_PUBLISH_KEY }}
+          SMILELAB_SSH_KNOWN_HOSTS: ${{ secrets.SMILELAB_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_dir="$(mktemp -d "$TMPDIR/smilelab-ssh.XXXXXX")"
+          trap 'rm -rf -- "$key_dir"' EXIT
+          printf '%s\n' "$SMILELAB_PUBLISH_KEY" > "$key_dir/key"
+          printf '%s\n' "$SMILELAB_SSH_KNOWN_HOSTS" > "$key_dir/known_hosts"
+          unset SMILELAB_PUBLISH_KEY SMILELAB_SSH_KNOWN_HOSTS
+          image="$(cat backend/test-results/validated-image.txt)"
+          docker image save "$image" | gzip -1 | ssh -T -i "$key_dir/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$key_dir/known_hosts" -o ConnectTimeout=20 \
+            dcad@dcad.ai "deploy-smilelab $GITHUB_SHA $image"
+      - name: Clean isolated CI leftovers
+        if: always()
+        shell: bash
+        run: |
+          # 此 daemon 只属于 Smilelab CI，无法访问主机服务；不清理主机 Docker。
+          docker ps -aq --filter label=smilelab.test | xargs -r docker rm -f
+          docker volume ls -q --filter label=smilelab.test | xargs -r docker volume rm
+          docker network ls -q --filter label=smilelab.test | xargs -r docker network rm
+          docker image prune -af --filter 'until=168h'
+          docker builder prune -af --filter 'until=168h' --keep-storage 4GB
