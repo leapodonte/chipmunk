@@ -536,6 +536,21 @@ class DsoTests(unittest.TestCase):
         unchanged=call("/api/dso/v1/orders/"+identifier,self.alice)
         self.assertEqual((unchanged["status"],unchanged["version"]),("paid",3))
 
+    def test_26_order_concurrent_readers_never_mix_snapshot_and_timeline(self):
+        order=self.paid_order();identifier=order['id']
+        def reader(actor):
+            for _ in range(12):
+                view=call('/api/dso/v1/orders/'+identifier,actor)
+                self.assertEqual(len(view['timeline']),view['version'])
+                self.assertEqual(view['timeline'][-1]['toStatus'],view['status'])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            readers=[pool.submit(reader,actor) for actor in [self.alice,self.staff['manager'],self.staff['quality']]]
+            order=self.order_action(order,self.staff['sales'],'sales_validate')
+            order=self.order_action(order,self.staff['manufacturer'],'manufacturer_validate')
+            order=self.order_action(order,self.staff['manufacturer'],'start_manufacturing',{'batchRef':'SYNTHETIC-READ-RACE'})
+            order=self.order_action(order,self.staff['manufacturer'],'finish_manufacturing')
+            for result in readers:result.result()
+
     def test_25_order_rejection_cancellation_and_reason_redaction(self):
         order=self.order()
         rejected=self.order_action(order,self.staff["doctor"],"doctor_reject",{"reason":"Synthetic confidential clinical reason"})

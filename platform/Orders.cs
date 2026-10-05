@@ -50,7 +50,8 @@ public sealed class Orders(Store store, User user, HttpContext context, IConfigu
     }
     public async Task<JsonObject> Get(string id)
     {
-        var order = View(await Raw(id));
+        // 同一事务持有订单行锁，避免当前版本与随后读取的历程来自不同提交。
+        var order = View(await Raw(id, true));
         order["timeline"] = await access.JsonRows("SELECT jsonb_build_object('version',version,'action',action,'fromStatus',from_status,'toStatus',to_status,'actorRole',actor_role,'details',CASE WHEN action='doctor_reject' AND NOT @clinical THEN details-'reasonText' ELSE details END,'createdAt',created_at)::text FROM dso_order_event WHERE order_id=@id AND tenant_id=@tenant AND clinic_id=@clinic ORDER BY version", ("id", id), ("clinical", user.Has("patient", "doctor")));
         order["payment"] = (await access.JsonRows("SELECT jsonb_build_object('receiptId',id,'amountMinor',amount_minor,'currency',currency,'provider',provider,'isSimulated',true,'paidAt',paid_at)::text FROM dso_order_payment WHERE order_id=@id AND tenant_id=@tenant AND clinic_id=@clinic", ("id", id))).FirstOrDefault()?.DeepClone();
         await store.Audit(user, context, "order.read", id);
