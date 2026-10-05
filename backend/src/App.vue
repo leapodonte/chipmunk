@@ -8,30 +8,36 @@ import { client, token, context, clearSession, useAction } from './session';
 const AppointmentsPanel = defineAsyncComponent(() => import('./components/AppointmentsPanel.vue'));
 const PatientsPanel = defineAsyncComponent(() => import('./components/PatientsPanel.vue'));
 const CrmPanel = defineAsyncComponent(() => import('./components/CrmPanel.vue'));
+const OrdersPanel = defineAsyncComponent(() => import('./components/OrdersPanel.vue'));
 const OperationsPanel = defineAsyncComponent(() => import('./components/OperationsPanel.vue'));
 
 const { t, locale } = useI18n();
 const { busy, error, run } = useAction();
+const patientCode = ref('demo:workspace-patient');
 const identity = ref('staff:doctor'); const key = ref(''); const clinics = ref<Clinic[]>([]);
 const view = ref('appointments');
 const has = (...roles: Role[]) => context.value?.roles.some(x => roles.includes(x)) ?? false;
 const views = computed(() => [
+  ...(has('patient', 'sales', 'manufacturer', 'quality') ? ['orders'] : []),
   ...(has('doctor', 'assistant', 'clinic_manager', 'regional_manager', 'platform_admin') ? ['appointments'] : []),
   ...(has('doctor', 'consultant', 'clinic_manager', 'regional_manager', 'platform_admin') ? ['patients'] : []),
   ...(has('doctor', 'consultant', 'clinic_manager', 'regional_manager', 'platform_operator', 'platform_admin') ? ['crm'] : []),
   ...(has('platform_operator', 'platform_admin') ? ['operations'] : []),
+  ...(has('doctor', 'clinic_manager', 'regional_manager', 'platform_operator', 'platform_admin') ? ['orders'] : []),
 ]);
-const component = computed(() => ({ appointments: AppointmentsPanel, patients: PatientsPanel, crm: CrmPanel, operations: OperationsPanel })[view.value as 'appointments']);
+const component = computed(() => ({ orders: OrdersPanel, appointments: AppointmentsPanel, patients: PatientsPanel, crm: CrmPanel, operations: OperationsPanel })[view.value as 'appointments']);
 const currentClinic = computed(() => clinics.value.find(x => x.id === context.value?.clinicId)?.name ?? context.value?.clinicId);
 
 async function login() {
   const result = await run(async () => {
-    const auth = await client.mini<Login>('auth/staff-login', 'POST', { identity: identity.value }, { 'X-Staff-Dev-Key': key.value });
+    const auth = identity.value === 'patient'
+      ? await client.mini<Login>('auth/mp-login', 'POST', { code: patientCode.value }, { 'X-Dev-Key': key.value })
+      : await client.mini<Login>('auth/staff-login', 'POST', { identity: identity.value }, { 'X-Staff-Dev-Key': key.value });
     token.value = auth.token;
     try {
       context.value = await client.dso<Context>('context');
       clinics.value = await client.dso<Clinic[]>('clinics/mine');
-      view.value = views.value[0] ?? 'appointments';
+      view.value = new URLSearchParams(location.search).has('order') && views.value.includes('orders') ? 'orders' : views.value[0] ?? 'appointments';
       return true;
     } catch (e) { clearSession(); throw e }
   });
@@ -52,7 +58,7 @@ async function logout() { if (busy.value) return; await run(() => client.mini('a
     <div v-if="!context" class="login-shell">
       <div class="login-story"><div class="brand-mark">S</div><p class="eyebrow">{{ t('workspace') }}</p><h1>{{ t('brand') }}</h1><p class="story-line">{{ t('tagline') }}</p><div class="story-orbit"></div><span class="demo-badge">{{ t('demo') }}</span></div>
       <div class="login-form-wrap"><a-button class="language-button" @click="locale = locale === 'zh-Hans' ? 'en' : 'zh-Hans'">{{ t('language') }}</a-button><div class="login-form"><h2>{{ t('loginTitle') }}</h2><p class="muted">{{ t('loginDescription') }}</p><a-alert v-if="error" :message="error" type="error" show-icon class="spaced" />
-        <a-form layout="vertical" :model="{ identity, key }" @finish="login"><a-form-item :label="t('identity')"><a-select v-model:value="identity" :options="[{ value: 'staff:doctor', label: t('doctor') }, { value: 'staff:manager', label: t('manager') }, { value: 'staff:consultant', label: t('consultant') }, { value: 'staff:operator', label: t('operator') }]" /></a-form-item><a-form-item :label="t('staffKey')"><a-input-password v-model:value="key" autocomplete="off" :aria-label="t('staffKey')" /></a-form-item><a-button type="primary" html-type="submit" block size="large" :loading="busy" :disabled="!key">{{ t('login') }}</a-button></a-form>
+        <a-form layout="vertical" :model="{ identity, key }" @finish="login"><a-form-item :label="t('identity')"><a-select v-model:value="identity" :options="[{ value: 'staff:doctor', label: t('doctor') }, { value: 'staff:manager', label: t('manager') }, { value: 'staff:consultant', label: t('consultant') }, { value: 'staff:operator', label: t('operator') }, { value: 'patient', label: t('orders.loginPatient') }, { value: 'staff:sales', label: t('orders.sales') }, { value: 'staff:manufacturer', label: t('orders.manufacturer') }, { value: 'staff:quality', label: t('orders.quality') }]" /></a-form-item><a-form-item v-if="identity === 'patient'" :label="t('orders.patientCode')"><a-input v-model:value="patientCode" :aria-label="t('orders.patientCode')" /></a-form-item><a-form-item :label="identity === 'patient' ? t('orders.devKey') : t('staffKey')"><a-input-password v-model:value="key" autocomplete="off" :aria-label="identity === 'patient' ? t('orders.devKey') : t('staffKey')" /></a-form-item><a-button type="primary" html-type="submit" block size="large" :loading="busy" :disabled="!key">{{ t('login') }}</a-button></a-form>
       </div></div>
     </div>
     <div v-else class="workspace-shell">

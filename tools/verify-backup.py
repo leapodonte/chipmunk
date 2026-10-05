@@ -36,7 +36,7 @@ for container,user,dump,table in [
             objects=json.loads(rows)
             if sql(container,user,target,"SELECT to_regclass('platform_migration') IS NOT NULL")=='t':
                 checks['migrationLedgerEntries']=int(sql(container,user,target,'SELECT count(*) FROM platform_migration'))
-            for name in ['dso_appointment','dso_clinical_record','platform_staff_credential']:
+            for name in ['dso_appointment','dso_clinical_record','platform_staff_credential','dso_order','dso_order_event','dso_order_payment']:
                 if sql(container,user,target,f"SELECT to_regclass('{name}') IS NOT NULL")=='t':
                     checks[name]=int(sql(container,user,target,f'SELECT count(*) FROM {name}'))
         else:
@@ -58,7 +58,7 @@ if (snapshot/'source.tar.gz').exists():
     checks['sourceArchiveVerified']=True
 if (snapshot/'staff-demo.json').exists():
     staff=json.loads((snapshot/'staff-demo.json').read_text())
-    assert len(staff['accounts'])==5 and checks.get('platform_staff_credential',0)>=5
+    assert len(staff['accounts'])>=5 and checks.get('platform_staff_credential',0)>=len(staff['accounts'])
     checks['staffCredentialBackupVerified']=True
 print('PASS snapshot media byte hashes, Odoo filestore and available source/credential archives')
 Path('/tmp/smilelab-backup-verification.json').write_text(json.dumps({'snapshot':snapshot.name,'databasesRestored':2,'mediaHashesVerified':len(objects),'odooFilestorePresent':True,'offsiteBackup':False,'checks':checks,'date':'2026-10-05'},indent=2)+'\n')

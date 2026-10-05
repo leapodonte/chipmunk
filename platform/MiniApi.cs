@@ -34,6 +34,7 @@ public sealed class MiniApi(Store store, IConfiguration config, HttpContext cont
             ["avatar"] = "", ["isMember"] = false, ["hasBoundDoctor"] = await CurrentTreatment(user) is not null,
             ["tenantId"] = user.Tenant, ["organizationId"] = user.Organization, ["clinicId"] = user.Clinic, ["roles"] = new JsonArray(user.Roles.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) };
         user.Require("patient");
+        if (path == "orders" || path.StartsWith("orders/", StringComparison.Ordinal)) return await DsoApi.HandleAuthorized(store, config, context, user, path, body);
         if (path is "appointments" or "appointments/mine" or "slots" or "patients/me" or "patients/me/records" or "patients/me/care-team" || path.StartsWith("patients/me/care-team/", StringComparison.Ordinal) || path.StartsWith("appointments/", StringComparison.Ordinal))
             return await DsoApi.HandleAuthorized(store, config, context, user, path, body);
         if (path == "users/me/questionnaire" && Method == "POST")

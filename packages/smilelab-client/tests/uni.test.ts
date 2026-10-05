@@ -87,3 +87,16 @@ test('开发登录密钥由调用者显式提供，API源必须HTTPS', async () 
   assert.throws(() => new SmilelabUniClient({ transport: f.transport, token: () => null, baseUrl: 'http://app.smilelab.ai' }));
   assert.throws(() => f.client.request('/api/v1/../../outside'));
 });
+
+
+test('订单申请、模拟付款和签收保留唯一业务键与订单编号', async () => {
+  const f = fixture();
+  const body = { doctorId: 'd_001', productCode: 'retainer_pair', quantity: 1, requestText: 'Synthetic', shippingAddress: { recipient: 'Synthetic', phone: '0000', address: 'Synthetic' } };
+  const order = f.client.requestOrder(body, 'request-key');
+  assert.equal(f.requests[0].url, 'https://app.smilelab.ai/api/v1/orders'); assert.equal(f.requests[0].header['Idempotency-Key'], 'request-key');
+  assert.deepEqual(JSON.parse(f.requests[0].data!), body); respond(f.requests[0], { id: 'order-test' }); await order;
+  const payment = f.client.payDemo('order-test', 2, 'payment-key');
+  assert.equal(f.requests[1].header['Idempotency-Key'], 'payment-key'); assert.deepEqual(JSON.parse(f.requests[1].data!), { version: 2, confirmSimulation: true }); respond(f.requests[1]); await payment;
+  const delivery = f.client.confirmDelivery('order-test', 9, 'delivery-key');
+  assert.equal(f.requests[2].url, 'https://app.smilelab.ai/api/v1/orders/order-test/actions/confirm_delivery'); assert.equal(f.requests[2].header['Idempotency-Key'], 'delivery-key'); respond(f.requests[2]); await delivery;
+});

@@ -156,9 +156,19 @@ def main():
                 url=urllib.parse.urlsplit(grant['url'])
                 with urllib.request.urlopen(abase+url.path+'?'+url.query,timeout=20) as response: data=response.read()
                 assert hashlib.sha256(data).hexdigest()==obj['sha256'];verified+=1
+            orders_verified=0
+            if sql(pdb,'chipmunk','chipmunk_platform',"SELECT to_regclass('dso_order') IS NOT NULL")=='t':
+                orders=json.loads(sql(pdb,'chipmunk','chipmunk_platform',"SELECT coalesce(json_agg(jsonb_build_object('id',o.id,'status',o.status,'version',o.version,'user',p.user_id,'clinic',o.clinic_id)),'[]'::json) FROM dso_order o JOIN dso_patient p ON p.id=o.patient_id"))
+                for order in orders:
+                    token=secrets.token_hex(32);digest=hashlib.sha256(token.encode()).hexdigest()
+                    payload=json.dumps({'hash':digest,'user':order['user'],'clinic':order['clinic']}).replace("'","''")
+                    sql(pdb,'chipmunk','chipmunk_platform',"INSERT INTO platform_session(token_hash,user_id,clinic_id,expires_at) SELECT p->>'hash',p->>'user',p->>'clinic',now()+interval '5 minutes' FROM (SELECT '"+payload+"'::jsonb p) x")
+                    result=call(abase,'/api/v1/orders/'+urllib.parse.quote(order['id'],safe=''),token=token)['data']
+                    assert (result['status'],result['version'])==(order['status'],order['version']) and len(result['timeline'])==order['version']
+                    orders_verified+=1
             with urllib.request.urlopen(abase+'/workspace/',timeout=20) as response:
                 assert b'<div id="app">' in response.read()
-            report={'snapshot':snapshot.name,'isolated':True,'imageArchiveLoaded':image_archive.exists(),'databasesRestored':2,'apiHealthy':True,'odooAdminLogin':True,'bridgeDelivery':True,'staffAccountsVerified':len(tokens),'mediaDownloadsHashVerified':verified,'workspaceLoaded':True,'elapsedSeconds':round(time.monotonic()-started,1),'limitations':['same-host recovery rehearsal; no replacement VPS or offsite backup']}
+            report={'snapshot':snapshot.name,'isolated':True,'imageArchiveLoaded':image_archive.exists(),'databasesRestored':2,'apiHealthy':True,'odooAdminLogin':True,'bridgeDelivery':True,'staffAccountsVerified':len(tokens),'mediaDownloadsHashVerified':verified,'workspaceLoaded':True,'orderTimelinesVerified':orders_verified,'elapsedSeconds':round(time.monotonic()-started,1),'limitations':['same-host recovery rehearsal; no replacement VPS or offsite backup']}
             Path(args.output).write_text(json.dumps(report,indent=2)+'\n')
             print(json.dumps(report))
         finally:

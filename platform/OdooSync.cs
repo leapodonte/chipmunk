@@ -39,14 +39,15 @@ public sealed class OdooSync(NpgsqlDataSource source, IConfiguration config, ILo
                     if (!response.IsSuccessStatusCode) throw new InvalidOperationException("Odoo HTTP " + (int)response.StatusCode);
                     var result = JsonNode.Parse(await response.Content.ReadAsStringAsync(stoppingToken))!;
                     var data = result["data"];
-                    if (result["code"]?.GetValue<int>() != 0 || data?["model"]?.GetValue<string>() != "crm.lead" || data["id"]?.GetValue<int>() is not > 0)
+                    var expectedModel = row[2] == "order.snapshot" ? "chipmunk.order" : "crm.lead";
+                    if (result["code"]?.GetValue<int>() != 0 || data?["model"]?.GetValue<string>() != expectedModel || data["id"]?.GetValue<int>() is not > 0)
                         throw new InvalidOperationException("Invalid Odoo bridge response");
                     await using var c = await source.OpenConnectionAsync(stoppingToken); await using var tx = await c.BeginTransactionAsync(stoppingToken);
                     var store = new Store(c);
                     var claimed = await store.Rows("SELECT id FROM integration_outbox WHERE id=@id AND status='processing' AND lease_token=@lease FOR UPDATE", ("id", row[0]), ("lease", lease));
                     if (claimed.Count != 0)
                     {
-                        await store.Execute("INSERT INTO integration_mapping(tenant_id,entity_type,platform_id,odoo_model,odoo_id) VALUES(@tenant,'crm.lead',@platform,@model,@odoo) ON CONFLICT(tenant_id,entity_type,platform_id) DO UPDATE SET odoo_model=EXCLUDED.odoo_model,odoo_id=EXCLUDED.odoo_id",
+                        await store.Execute("INSERT INTO integration_mapping(tenant_id,entity_type,platform_id,odoo_model,odoo_id) VALUES(@tenant,@model,@platform,@model,@odoo) ON CONFLICT(tenant_id,entity_type,platform_id) DO UPDATE SET odoo_model=EXCLUDED.odoo_model,odoo_id=EXCLUDED.odoo_id",
                             ("tenant", row[1]), ("platform", row[3]), ("model", data["model"]!.GetValue<string>()), ("odoo", data["id"]!.GetValue<int>()));
                         await store.Execute("UPDATE integration_outbox SET status='delivered',delivered_at=now(),last_error=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=@id AND lease_token=@lease", ("id", row[0]), ("lease", lease));
                     }

@@ -52,6 +52,7 @@ python platform/tests/odoo_integration.py
 - [DSO 开发接口、权限和工作流](doc/Smilelab_DSO开发接口与工作流.md)
 - [小程序 API 开发文档](doc/Smilelab小程序API开发文档.md)
 - [复用项目、许可与组件决策](doc/DSO复用项目评估与组件决策.md)
+- [单一订单与患者/销售/制造/质检工作流](doc/Smilelab共享订单开发文档.md)
 - [容量采样与运行边界](doc/Smilelab_DSO容量与运行边界.md)
 - [交付、SSH 管理与后续计划](doc/Smilelab_DSO交付与后续计划.md)
 - [第三方许可说明](THIRD_PARTY_NOTICES.md)

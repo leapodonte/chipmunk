@@ -99,7 +99,7 @@ class DsoTests(unittest.TestCase):
         credentials = json.loads(cls.credential_file.read_text())
         STAFF_KEYS.update({name: value["key"] for name, value in credentials["accounts"].items()})
         cls.staff = {}
-        for identity in ["doctor", "doctor2", "manager", "consultant", "operator"]:
+        for identity in ["doctor", "doctor2", "manager", "consultant", "operator", "sales", "manufacturer", "quality"]:
             cls.staff[identity] = call("/api/v1/auth/staff-login", method="POST", body={"identity": "staff:" + identity}, headers={"X-Staff-Dev-Key": STAFF_KEYS[identity]})["token"]
         cls.alice = call("/api/v1/auth/mp-login", method="POST", body={"code": "demo:dso-alice"}, headers={"X-Dev-Key": DEV})["token"]
         cls.bob = call("/api/v1/auth/mp-login", method="POST", body={"code": "demo:dso-bob"}, headers={"X-Dev-Key": DEV})["token"]
@@ -132,12 +132,12 @@ class DsoTests(unittest.TestCase):
         os.chmod(conflict, 0o600)
         conflicting_command = self.provision_command[:-1] + [str(conflict)]
         self.assertNotEqual(command(*conflicting_command, check=False).returncode, 0)
-        self.assertEqual(sql("SELECT count(*) FROM platform_staff_credential").stdout.strip(), "5")
+        self.assertEqual(sql("SELECT count(*) FROM platform_staff_credential").stdout.strip(), "8")
         self.assertEqual(sql("SELECT token_hash FROM platform_staff_credential WHERE user_id='staff_demo_doctor'").stdout.strip(), hashlib.sha256(STAFF_KEYS["doctor"].encode()).hexdigest())
 
     def test_01_existing_schema_upgrade_and_restart_ledger(self):
         global BASE
-        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "7")
+        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "8")
         self.assertEqual(sql("SELECT role FROM platform_role_assignment WHERE user_id='legacy_user'").stdout.strip(), "patient")
         self.assertEqual(sql("SELECT clinic_id FROM platform_session WHERE user_id='legacy_user'").stdout.strip(), "clinic_demo")
         violations = sql("INSERT INTO platform_resource(id,tenant_id,clinic_id,owner_id,kind,body) VALUES('bad','tenant_foreign','clinic_demo',NULL,'test','{}')", check=False)
@@ -158,7 +158,7 @@ class DsoTests(unittest.TestCase):
                 time.sleep(0.25)
         else:
             self.fail("API did not recover after restart")
-        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "7")
+        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "8")
         self.assertEqual(call('/api/dso/v1/slots', self.staff['manager'], 'POST', legacy_body, {'Idempotency-Key':'legacy-clinic-replay'})['id'], legacy_slot['id'])
         for _ in range(20):
             if sql("SELECT (SELECT count(*) FROM platform_session WHERE token_hash='maintenance-expired')+(SELECT count(*) FROM platform_rate_limit WHERE scope='maintenance-expired')").stdout.strip() == "0":
@@ -446,6 +446,107 @@ class DsoTests(unittest.TestCase):
         self.assertIn(401, statuses)
         self.assertEqual(statuses[-1], 429)
 
+
+
+    def order(self):
+        body = {"doctorId":"d_001","productCode":"retainer_pair","quantity":1,"requestText":"Synthetic patient request","shippingAddress":{"recipient":"Synthetic recipient","phone":"000000","address":"Synthetic delivery address"}}
+        return call("/api/v1/orders", self.alice, "POST", body, {"Idempotency-Key":secrets.token_hex(12)})
+
+    def order_action(self, order, actor, action, extra=None, expected=200, key=None):
+        return call("/api/dso/v1/orders/"+order["id"]+"/actions/"+action, actor, "POST", {"version":order["version"],**(extra or {})}, {"Idempotency-Key":key or secrets.token_hex(12)}, expected)
+
+    def paid_order(self):
+        order=self.order()
+        order=self.order_action(order,self.staff["doctor"],"doctor_approve",{"productionSpec":"Synthetic approved upper/lower specification"})
+        return self.order_action(order,self.alice,"pay_demo",{"confirmSimulation":True})
+
+    def qa_order(self):
+        order=self.paid_order()
+        for action,actor,extra in [("sales_validate","sales",{}),("manufacturer_validate","manufacturer",{}),("start_manufacturing","manufacturer",{"batchRef":"SYNTHETIC-BATCH"}),("finish_manufacturing","manufacturer",{})]:
+            order=self.order_action(order,self.staff[actor],action,extra)
+        return order
+
+    def test_20_order_single_truth_complete_role_workflow(self):
+        order=self.order(); identifier=order["id"]
+        steps=[("doctor_approve",self.staff["doctor"],{"productionSpec":"Synthetic approved specification"},"pending_payment"),("pay_demo",self.alice,{"confirmSimulation":True},"paid"),("sales_validate",self.staff["sales"],{},"sales_validated"),("manufacturer_validate",self.staff["manufacturer"],{},"manufacturing_ready"),("start_manufacturing",self.staff["manufacturer"],{"batchRef":"SYNTHETIC-COMPLETE"},"manufacturing"),("finish_manufacturing",self.staff["manufacturer"],{},"qa_pending"),("qa_pass",self.staff["quality"],{"checks":dict.fromkeys(["identity","specification","finish","packaging"],True)},"qa_passed"),("ship",self.staff["manufacturer"],{"carrier":"Demo carrier","trackingNumber":"SYNTHETIC-TRACK"},"shipped"),("confirm_delivery",self.alice,{},"delivered")]
+        for action,actor,extra,status in steps:
+            order=self.order_action(order,actor,action,extra)
+            self.assertEqual(order["id"],identifier);self.assertEqual(order["status"],status)
+            for viewer in [self.alice,self.staff["doctor"],self.staff["manager"],self.staff["sales"],self.staff["manufacturer"],self.staff["quality"]]:
+                view=call("/api/dso/v1/orders/"+identifier,viewer)
+                self.assertEqual((view["status"],view["version"]),(status,order["version"]))
+                self.assertEqual([e["toStatus"] for e in view["timeline"]],[e["toStatus"] for e in order["timeline"]])
+        self.assertEqual(len(order["timeline"]),10);self.assertEqual(order["version"],10)
+        self.assertEqual(order["amountMinor"],36000);self.assertTrue(order["payment"]["isSimulated"])
+        self.assertEqual(order["payment"]["amountMinor"],order["amountMinor"])
+        self.assertEqual(order["allowedActions"],[])
+
+    def test_21_order_roles_privacy_and_stage_guards(self):
+        order=self.order(); path="/api/dso/v1/orders/"+order["id"]
+        for viewer in [self.bob,self.foreign,self.staff["doctor2"]]:call(path,viewer,expected=404)
+        self.order_action(order,self.alice,"doctor_approve",{"productionSpec":"forged"},403)
+        self.order_action(order,self.staff["sales"],"sales_validate",expected=409)
+        self.order_action(order,self.alice,"pay_demo",{"confirmSimulation":True},409)
+        approved=self.order_action(order,self.staff["doctor"],"doctor_approve",{"productionSpec":"Synthetic private production spec"})
+        manager=call(path,self.staff["manager"])
+        for field in ["requestText","productionSpec","shippingAddress"]:self.assertNotIn(field,manager)
+        factory=call(path,self.staff["manufacturer"]);self.assertNotIn("requestText",factory);self.assertIn("productionSpec",factory)
+        quality=call(path,self.staff["quality"]);self.assertNotIn("shippingAddress",quality)
+        self.order_action(approved,self.staff["manufacturer"],"ship",{"carrier":"demo","trackingNumber":"demo"},409)
+        call("/api/v1/orders/"+order["id"],self.alice)
+        sql("UPDATE dso_doctor SET active=false WHERE id='d_001'")
+        try:call(path,self.staff["doctor"],expected=404)
+        finally:sql("UPDATE dso_doctor SET active=true WHERE id='d_001'")
+
+    def test_22_order_qa_failure_rework_and_independent_inspection(self):
+        order=self.qa_order();checks=dict.fromkeys(["identity","specification","finish","packaging"],True)
+        self.order_action(order,self.staff["quality"],"qa_pass",{"checks":{}},400)
+        self.order_action(order,self.staff["quality"],"qa_fail",{"checks":checks,"reason":"Synthetic defect"},400)
+        checks["finish"]=False
+        self.order_action(order,self.staff["quality"],"qa_pass",{"checks":checks},409)
+        order=self.order_action(order,self.staff["quality"],"qa_fail",{"checks":checks,"reason":"Synthetic finish defect"})
+        self.assertEqual(order["status"],"rework_required")
+        self.order_action(order,self.staff["manufacturer"],"ship",{"carrier":"demo","trackingNumber":"demo"},409)
+        order=self.order_action(order,self.staff["manufacturer"],"start_manufacturing",{"batchRef":"SYNTHETIC-REWORK"})
+        order=self.order_action(order,self.staff["manufacturer"],"finish_manufacturing")
+        # 同时有制造和质检角色的人也不能检验自己完成的产品。
+        sql("INSERT INTO platform_role_assignment(id,user_id,tenant_id,clinic_id,role) VALUES('maker_quality','staff_demo_manufacturer','tenant_demo','clinic_demo','quality')")
+        try:self.order_action(order,self.staff["manufacturer"],"qa_pass",{"checks":dict.fromkeys(checks,True)},409)
+        finally:sql("DELETE FROM platform_role_assignment WHERE id='maker_quality'")
+        order=self.order_action(order,self.staff["quality"],"qa_pass",{"checks":dict.fromkeys(checks,True)})
+        self.assertEqual(order["status"],"qa_passed");self.assertEqual(order["batchRef"],"SYNTHETIC-REWORK")
+
+    def test_23_order_payment_concurrency_replay_and_frozen_quote(self):
+        order=self.order();key=secrets.token_hex(12);body={"productionSpec":"Synthetic frozen spec"}
+        approved=self.order_action(order,self.staff["doctor"],"doctor_approve",body,key=key)
+        self.order_action(approved,self.alice,"pay_demo",{"confirmSimulation":False},400)
+        self.order_action(approved,self.alice,"pay_demo",{"confirmSimulation":True,"amountMinor":1},400)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures=[pool.submit(request,"/api/v1/orders/"+order["id"]+"/actions/pay_demo",self.alice,"POST",{"version":approved["version"],"confirmSimulation":True},{"Idempotency-Key":secrets.token_hex(12)}) for _ in range(2)]
+        self.assertEqual(sorted(f.result()[0] for f in futures),[200,409])
+        replay=self.order_action(order,self.staff["doctor"],"doctor_approve",body,key=key)
+        self.assertEqual(replay["status"],"paid");self.assertEqual(replay["version"],3)
+        self.assertEqual(sql("SELECT count(*) FROM dso_order_payment WHERE order_id='"+order["id"]+"'").stdout.strip(),"1")
+        self.order_action(replay,self.alice,"cancel",expected=409)
+
+    def test_24_order_database_ledger_and_immutability(self):
+        order=self.paid_order();identifier=order["id"]
+        for statement in ["DELETE FROM dso_order_event WHERE order_id='"+identifier+"'", "UPDATE dso_order_payment SET amount_minor=1 WHERE order_id='"+identifier+"'", "UPDATE dso_order SET status='shipped',version=version+1 WHERE id='"+identifier+"'", "UPDATE dso_order SET status='sales_validated',version=version+1 WHERE id='"+identifier+"'", "UPDATE dso_order SET amount_minor=1 WHERE id='"+identifier+"'", "DELETE FROM dso_order WHERE id='"+identifier+"'"]:
+            self.assertNotEqual(sql(statement,check=False).returncode,0)
+        unchanged=call("/api/dso/v1/orders/"+identifier,self.alice)
+        self.assertEqual((unchanged["status"],unchanged["version"]),("paid",3))
+
+    def test_25_order_rejection_cancellation_and_reason_redaction(self):
+        order=self.order()
+        rejected=self.order_action(order,self.staff["doctor"],"doctor_reject",{"reason":"Synthetic confidential clinical reason"})
+        self.assertEqual(rejected["status"],"rejected")
+        patient=call("/api/v1/orders/"+order["id"],self.alice)
+        self.assertEqual(patient["timeline"][-1]["details"]["reasonText"],"Synthetic confidential clinical reason")
+        sales=call("/api/dso/v1/orders/"+order["id"],self.staff["sales"])
+        self.assertNotIn("reasonText",sales["timeline"][-1]["details"])
+        order=self.order();cancelled=self.order_action(order,self.alice,"cancel")
+        self.assertEqual(cancelled["status"],"cancelled")
+        self.order_action(cancelled,self.staff["doctor"],"doctor_approve",{"productionSpec":"Synthetic"},409)
 
 class QueueTests(unittest.TestCase):
     workers = []

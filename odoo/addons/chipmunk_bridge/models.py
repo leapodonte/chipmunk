@@ -29,3 +29,20 @@ class CommercialLead(models.Model):
     _inherit = 'crm.lead'
 
     chipmunk_platform_ref = fields.Char(index=True, readonly=True)
+
+
+class OrderMirror(models.Model):
+    _name = 'chipmunk.order'
+    _description = '花栗鼠订单只读商业镜像（平台是真相源）'
+    _rec_name = 'platform_ref'
+    platform_ref = fields.Char(required=True, index=True, readonly=True)
+    tenant_id = fields.Char(required=True, index=True, readonly=True)
+    company_id = fields.Many2one('res.company', required=True, readonly=True)
+    platform_version = fields.Integer(required=True, readonly=True)
+    platform_status = fields.Char(required=True, readonly=True)
+    product_code = fields.Char(required=True, readonly=True)
+    quantity = fields.Integer(required=True, readonly=True)
+    amount_minor = fields.Integer(required=True, readonly=True)
+    currency_code = fields.Char(required=True, readonly=True)
+    payment_mode = fields.Char(required=True, readonly=True)
+    _platform_unique = models.Constraint('UNIQUE(tenant_id,platform_ref)', '每个平台订单只有一个商业镜像')

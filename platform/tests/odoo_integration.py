@@ -125,6 +125,49 @@ print('SYNTHETIC_MAPPING_AND_ACL_OK')
         self.assertEqual(sql("SELECT count(*) FROM ir_model_data WHERE module='chipmunk_bridge' AND name IN ('tenant_company_list','tenant_company_form','integration_event_list','integration_menu')"), "4")
 
 
+    def order_snapshot(self, reference, version, status='requested', suffix=''):
+        return {"eventId":"evt_order_"+reference+"_"+str(version)+suffix,"tenantId":"tenant_demo","eventType":"order.snapshot","platformId":reference,"payload":{"platformRef":reference,"version":version,"status":status,"amountMinor":36000,"currency":"CNY","productCode":"retainer_pair","quantity":1,"paymentMode":"demo"}}
+
+    def test_08_order_mirror_monotonic_and_replay(self):
+        newest=self.order_snapshot('synthetic_order',3,'paid')
+        first=send(newest)['data'];self.assertEqual(first['model'],'chipmunk.order')
+        self.assertEqual(send(self.order_snapshot('synthetic_order',1))['data']['id'],first['id'])
+        self.assertTrue(send(newest)['data']['duplicate'])
+        self.assertEqual(sql("SELECT platform_version||':'||platform_status FROM chipmunk_order WHERE platform_ref='synthetic_order'"),'3:paid')
+        send(self.order_snapshot('synthetic_order',3,'shipped','_conflict'),409)
+        self.assertEqual(send(self.order_snapshot('synthetic_order',4,'sales_validated'))['data']['id'],first['id'])
+        self.assertEqual(sql("SELECT count(*) FROM chipmunk_order WHERE platform_ref='synthetic_order'"),'1')
+
+    def test_09_order_payload_excludes_patient_and_shipping(self):
+        body=self.order_snapshot('invalid_order',1)
+        for field in ['patientName','requestText','productionSpec','shippingAddress']:
+            send(dict(body,payload={**body['payload'],field:'Synthetic private'}),400)
+        send(dict(body,payload={**body['payload'],'version':True}),400)
+        send(dict(body,payload={**body['payload'],'amountMinor':0}),400)
+        send(dict(body,payload={**body['payload'],'status':'arbitrary'}),400)
+
+    def test_10_order_mirror_readonly_for_admin_and_private_for_public(self):
+        code="""
+from odoo.exceptions import AccessError
+mirror=env['chipmunk.order'].search([],limit=1)
+for operation in [lambda:mirror.with_user(env.ref('base.user_admin')).write({'platform_status':'forged'}),lambda:env['chipmunk.order'].with_user(env.ref('base.public_user')).search([])]:
+    try:
+        operation()
+        raise AssertionError('Unauthorized mirror mutation/access')
+    except AccessError:
+        pass
+print('ORDER_MIRROR_READONLY_OK')
+"""
+        result=command('docker','exec','-i',WEB,'odoo','shell','-c','/etc/odoo/odoo.conf','-d','dso_bridge_test','--no-http','--workers=0',input=code)
+        self.assertIn('ORDER_MIRROR_READONLY_OK',result.stdout)
+
+    def test_11_concurrent_order_versions_keep_latest_snapshot(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results=list(pool.map(lambda version:send(self.order_snapshot('concurrent_order',version,'paid' if version>1 else 'requested'))['data'],[1,4,2,3]))
+        self.assertEqual(len({r['id'] for r in results}),1)
+        self.assertEqual(sql("SELECT platform_version FROM chipmunk_order WHERE platform_ref='concurrent_order'"),'4')
+
+
 def main():
     global BASE
     parser = argparse.ArgumentParser()

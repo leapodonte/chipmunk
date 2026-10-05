@@ -21,6 +21,12 @@ public sealed class DsoApi(Store store, IConfiguration config, HttpContext conte
         var clinical = new Clinical(store, user, context);
         var commercial = new Commercial(store, user, context);
         var operations = new Operations(store, user, context);
+        var orders = new Orders(store, user, context, config);
+        if (path == "orders/products" && method == "GET") return await orders.Products();
+        if (path == "orders" && method == "GET") return await orders.List();
+        if (path == "orders" && method == "POST") return await orders.Create(body);
+        if (parts.Length == 2 && parts[0] == "orders" && method == "GET") return await orders.Get(parts[1]);
+        if (parts.Length == 4 && parts[0] == "orders" && parts[2] == "actions" && method == "POST") return await orders.Act(parts[1], parts[3], body);
         if (path == "context" && method == "GET") return new JsonObject { ["userId"] = user.Id, ["tenantId"] = user.Tenant, ["organizationId"] = user.Organization, ["clinicId"] = user.Clinic, ["roles"] = new JsonArray(user.Roles.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()), ["environment"] = "dev-demo" };
         if (path == "clinics/mine" && method == "GET") return await access.JsonRows("SELECT jsonb_build_object('id',c.id,'name',c.name,'organizationId',c.organization_id)::text FROM platform_clinic c WHERE c.tenant_id=@tenant AND EXISTS(SELECT 1 FROM platform_role_assignment r WHERE r.user_id=@actor AND r.tenant_id=@tenant AND (r.clinic_id=c.id OR r.organization_id=c.organization_id OR (r.clinic_id IS NULL AND r.organization_id IS NULL))) ORDER BY c.id");
         if (path == "context/switch" && method == "POST")

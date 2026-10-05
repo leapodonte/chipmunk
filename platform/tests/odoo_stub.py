@@ -75,7 +75,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if failure:
             self.respond(503, {"code": 503})
         else:
-            self.respond(200, {"code": 0, "data": {"model": "crm.lead", "id": identifier, "duplicate": duplicate}})
+            self.respond(200, {"code": 0, "data": {"model": "chipmunk.order" if body.get("eventType") == "order.snapshot" else "crm.lead", "id": identifier, "duplicate": duplicate}})
 
 
 http.server.ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

@@ -76,6 +76,11 @@ export class SmilelabUniClient {
     // 签名 URL 已授予短期上传权限，不向文件请求附带员工密钥或 Bearer token。
     return this.perform<UploadedMedia>((success, fail) => uploadFile.call(this.options.transport, { url: grant.uploadUrl, filePath, name: 'file', formData: { ...grant.formData, key: grant.objectKey }, timeout: this.timeout(), success, fail }));
   }
+  orders() { return this.mini<import('./index.ts').SharedOrder[]>('orders'); }
+  order(id: string) { return this.mini<import('./index.ts').SharedOrder>('orders/' + encodeURIComponent(id)); }
+  requestOrder(body: { doctorId: string; productCode: string; quantity: number; requestText: string; shippingAddress: import('./index.ts').OrderAddress }, key: string) { return this.mini<import('./index.ts').SharedOrder>('orders', 'POST', body, { 'Idempotency-Key': key }); }
+  payDemo(id: string, version: number, key: string) { return this.mini<import('./index.ts').SharedOrder>('orders/' + encodeURIComponent(id) + '/actions/pay_demo', 'POST', { version, confirmSimulation: true }, { 'Idempotency-Key': key }); }
+  confirmDelivery(id: string, version: number, key: string) { return this.mini<import('./index.ts').SharedOrder>('orders/' + encodeURIComponent(id) + '/actions/confirm_delivery', 'POST', { version }, { 'Idempotency-Key': key }); }
   mediaUrl(id: string) { return this.mini<{ url: string; expiresIn: number }>('media/' + encodeURIComponent(id) + '/url'); }
   simulate(imageKey: string) { return this.mini<{ taskId: string; status: 'queued'; isMock: true }>('ai/simulations', 'POST', { imageKey }); }
   simulation(id: string) { return this.mini<Simulation>('ai/simulations/' + encodeURIComponent(id)); }

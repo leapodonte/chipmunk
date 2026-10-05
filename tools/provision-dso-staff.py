@@ -14,6 +14,9 @@ ACCOUNTS = {
     "manager": ("clinic_manager", "门诊经理（演示）", None),
     "consultant": ("consultant", "咨询顾问（演示）", None),
     "operator": ("platform_operator", "平台运维（演示）", None),
+    "sales": ("sales", "订单销售（演示）", None),
+    "manufacturer": ("manufacturer", "制造人员（演示）", None),
+    "quality": ("quality", "独立质检（演示）", None),
 }
 
 
@@ -37,9 +40,16 @@ def main():
         document = json.loads(output.read_text(encoding="utf-8"))
         if document.get("tenantId") != "tenant_demo" or document.get("clinicId") != "clinic_demo":
             raise SystemExit("Credential file belongs to another context")
-        keys = {name: document["accounts"][name]["key"] for name in ACCOUNTS}
+        keys = {name: document["accounts"][name]["key"] if name in document["accounts"] else secrets.token_hex(32) for name in ACCOUNTS}
         if any(not re.fullmatch(r"[a-f0-9]{64}", key) for key in keys.values()):
             raise SystemExit("Credential file contains invalid keys")
+        if any(name not in document["accounts"] for name in ACCOUNTS):
+            for name, (role, _, _) in ACCOUNTS.items():
+                document["accounts"].setdefault(name, {"identity": "staff:" + name, "role": role, "key": keys[name]})
+            temporary = output.with_name(output.name + "." + secrets.token_hex(6) + ".tmp")
+            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as file:
+                json.dump(document, file, ensure_ascii=False, indent=2); file.write("\n")
+            os.replace(temporary, output)
     else:
         keys = {name: secrets.token_hex(32) for name in ACCOUNTS}
         document = {
@@ -75,7 +85,7 @@ def main():
     if result.returncode:
         # 不转发 SQL 文本或数据库错误上下文，避免密钥摘要/身份泄露到 CI 日志。
         raise SystemExit("Staff provisioning failed; transaction rolled back. Private file retained for a safe retry.")
-    print("Provisioned 5 separate staff demo accounts; credentials saved privately. Existing credentials preserved.")
+    print(f"Provisioned {len(ACCOUNTS)} separate staff demo accounts; credentials saved privately. Existing credentials preserved.")
 
 
 if __name__ == "__main__":

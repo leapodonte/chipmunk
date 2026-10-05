@@ -68,7 +68,9 @@ paths['/storage/objects/{id}']={
 schemas['Envelope']={'type':'object','required':['code','message','data'],'properties':{'code':{'type':'integer'},'message':{'type':'string'},'data':{'nullable':True,'description':'由各接口定义返回类型'}}}
 document={'openapi':'3.0.3','info':{'title':'Smilelab 花栗鼠小程序开发API','version':'0.1.0','description':'开发演示环境。AI返回原图占位，SMS不发送；医疗数据不进入Odoo。'},'servers':[{'url':'https://app.smilelab.ai'}],'paths':paths,'components':{'securitySchemes':{'bearerAuth':{'type':'http','scheme':'bearer'}},'schemas':schemas}}
 extend(paths, schemas)
-document['info']['version'] = '0.2.0'
+from orders_openapi import extend as extend_orders
+extend_orders(paths, schemas)
+document['info']['version'] = '0.3.0'
 document['info']['title'] = 'Smilelab 花栗鼠小程序与DSO开发API'
 def remove_empty_required(value):
     if isinstance(value, dict):
@@ -86,3 +88,5 @@ Path(__file__).resolve().parents[1].joinpath('platform/DeveloperGuide.md').write
 root = Path(__file__).resolve().parents[1]
 guide = root.joinpath('platform/DeveloperGuide.md')
 guide.write_text(guide.read_text(encoding='utf-8') + '\n\n---\n\n' + root.joinpath('doc/Smilelab_DSO开发接口与工作流.md').read_text(encoding='utf-8'), encoding='utf-8')
+
+guide.write_text(guide.read_text(encoding='utf-8') + '\n\n---\n\n' + root.joinpath('doc/Smilelab共享订单开发文档.md').read_text(encoding='utf-8'), encoding='utf-8')

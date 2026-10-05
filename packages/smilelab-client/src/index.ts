@@ -1,4 +1,4 @@
-export type Role = 'patient' | 'doctor' | 'assistant' | 'consultant' | 'clinic_manager' | 'regional_manager' | 'supplier' | 'platform_operator' | 'platform_admin';
+export type Role = 'patient' | 'doctor' | 'assistant' | 'consultant' | 'clinic_manager' | 'regional_manager' | 'supplier' | 'sales' | 'manufacturer' | 'quality' | 'platform_operator' | 'platform_admin';
 export interface Context { userId: string; tenantId: string; organizationId: string; clinicId: string; roles: Role[]; environment: string }
 export interface Clinic { id: string; name: string; organizationId: string }
 export interface Doctor { id: string; name: string; active: boolean; canSchedule: boolean }
@@ -46,3 +46,9 @@ export class SmilelabClient {
 }
 
 export const newIdempotencyKey = () => crypto.randomUUID();
+
+export type OrderStatus = 'requested' | 'pending_payment' | 'paid' | 'sales_validated' | 'manufacturing_ready' | 'manufacturing' | 'qa_pending' | 'rework_required' | 'qa_passed' | 'shipped' | 'delivered' | 'rejected' | 'cancelled';
+export interface OrderProduct { code: string; name: string; priceMinor: number; currency: string; demo: true }
+export interface OrderEvent { version: number; action: string; fromStatus: OrderStatus | null; toStatus: OrderStatus; actorRole: Role; details: Record<string, unknown>; createdAt: string }
+export interface OrderAddress { recipient: string; phone: string; address: string }
+export interface SharedOrder { id: string; clinicId: string; patientId: string; doctorId: string; productCode: string; productName: string; quantity: number; amountMinor: number; currency: string; status: OrderStatus; nextRole: string; version: number; requestText?: string; productionSpec?: string; shippingAddress?: OrderAddress; batchRef: string; carrier: string; trackingNumber: string; createdAt: string; updatedAt: string; allowedActions: string[]; paymentMode: 'demo'; sourceOfTruth: 'platform'; timeline?: OrderEvent[]; payment?: { receiptId: string; amountMinor: number; currency: string; provider: 'demo'; isSimulated: true; paidAt: string } | null }

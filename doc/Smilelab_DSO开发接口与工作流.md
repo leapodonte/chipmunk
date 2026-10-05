@@ -1,6 +1,6 @@
 # Smilelab DSO 开发接口与工作流
 
-版本：0.2，2026-10-05。本文描述已实现的开发/演示功能。工作台与小程序共用独立的 `chipmunk_platform` 数据库，Odoo 使用 `smilelab_demo`；旧 `api/Admin.Api` 服务未被替换或初始化。
+版本：0.3，2026-10-05。本文描述已实现的开发/演示功能。工作台与小程序共用独立的 `chipmunk_platform` 数据库，Odoo 使用 `smilelab_demo`；旧 `api/Admin.Api` 服务未被替换或初始化。
 
 ## 入口与认证
 
@@ -165,3 +165,8 @@ const result = await api.simulation(task.taskId); // 仅 jobStatus=succeeded 时
 错误为 `ApiError`，包含 HTTP status 与 requestId；原生网络/超时/取消的 status 为0。401清除会话并重新登录；409刷新资源并确认状态，不能自动覆盖。取消网络请求不保证服务器事务未提交，重试预约应保持原幂等键。已上传文件不能覆盖；响应丢失时先核对上传状态，不能直接无限重试。
 
 适配器已通过8个原生传输契约测试，服务端 PUT 和日期区间通过真实 PostgreSQL 测试。微信开发者工具、真机及正式 code 登录尚未验证；当前仓库 `app/` 仍是占位目录，本轮交付的是小程序后端与可复用联调组件。
+
+
+## 单一订单工作流
+
+患者申请→指定医生批准→患者模拟付款→销售验证→制造验证/生产→独立质检→发货→患者签收。平台是唯一订单真相源，Odoo是只读镜像；接口及角色/可见性见 [共享订单开发文档](Smilelab共享订单开发文档.md)。新增员工演示账号 `staff:sales`、`staff:manufacturer`、`staff:quality`，既有账号密钥保留。
