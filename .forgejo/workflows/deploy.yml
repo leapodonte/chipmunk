@@ -7,7 +7,7 @@ on:
 
 # 升级不能中途取消；服务端另有发布锁和过期 main 提交保护。
 concurrency:
-  group: smilelab-${{ forgejo.ref }}
+  group: smilelab-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +22,8 @@ jobs:
         shell: bash
         run: bash tools/ci-smilelab.sh
       - name: Publish validated main image
-        if: forgejo.ref == 'refs/heads/main'
+        # 已安装 runner 6 使用 github 兼容上下文，Forgejo 提供同值别名。
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           SMILELAB_PUBLISH_KEY: ${{ secrets.SMILELAB_PUBLISH_KEY }}
@@ -48,5 +49,9 @@ jobs:
           docker ps -aq --filter label=smilelab.test | xargs -r docker rm -f
           docker volume ls -q --filter label=smilelab.test | xargs -r docker volume rm
           docker network ls -q --filter label=smilelab.test | xargs -r docker network rm
-          docker image prune -af --filter 'until=168h'
+          # 删除旧候选标签，保留近期验证镜像及按 digest 引用的基础镜像。
+          for candidate in $(docker image ls --format '{{.Repository}}:{{.Tag}}' 'chipmunk-platform:smilelab-*'); do
+            if [ "$candidate" != "chipmunk-platform:smilelab-$GITHUB_SHA" ]; then docker image rm "$candidate"; fi
+          done
+          docker image prune -f --filter 'until=168h'
           docker builder prune -af --filter 'until=168h' --keep-storage 4GB
