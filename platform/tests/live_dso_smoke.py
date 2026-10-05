@@ -40,7 +40,7 @@ ok('staff keys cannot authenticate another identity')
 run=uuid.uuid4().hex
 patient_token=call('/api/v1/auth/mp-login',method='POST',body={'code':'demo:dso-live-'+run},headers={'X-Dev-Key':env['CHIPMUNK_DEV_API_KEY']})['token']
 patient=call('/api/dso/v1/patients/me',patient_token)
-patient=call('/api/dso/v1/patients/me',patient_token,'PATCH',{'displayName':'Synthetic DSO verification '+run[:8],'version':patient['version'],'profile':{'gender':'unknown'}})
+patient=call('/api/dso/v1/patients/me',patient_token,'PUT',{'displayName':'Synthetic DSO verification '+run[:8],'version':patient['version'],'profile':{'gender':'unknown'}})
 call('/api/dso/v1/patients/'+patient['id'],staff['doctor'],expected=404)
 call('/api/dso/v1/patients/me/care-team/d_001',patient_token,'POST',{})
 call('/api/dso/v1/patients/'+patient['id'],staff['doctor'])

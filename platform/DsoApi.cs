@@ -44,7 +44,7 @@ public sealed class DsoApi(Store store, IConfiguration config, HttpContext conte
         if (parts.Length == 3 && parts[0] == "appointments" && parts[2] == "status" && method == "POST") return await appointments.Transition(parts[1], body);
         if (path == "patients" && method == "GET") return await clinical.Patients();
         if (path == "patients/me" && method == "GET") return await clinical.OwnProfile();
-        if (path == "patients/me" && method == "PATCH") return await clinical.UpdateProfile(body);
+        if (path == "patients/me" && method is "PATCH" or "PUT") return await clinical.UpdateProfile(body);
         if (path == "patients/me/records" && method == "GET") return await clinical.Records(await access.OwnPatient());
         if (path == "patients/me/care-team" && method == "GET") return await clinical.Team();
         if (parts.Length == 4 && parts[0] == "patients" && parts[1] == "me" && parts[2] == "care-team" && method is "POST" or "DELETE") return await clinical.CareTeam(parts[3], method == "POST");

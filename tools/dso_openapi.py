@@ -66,7 +66,7 @@ def extend(paths, schemas):
     operation("get", "/appointments", "员工按权限查看门诊预约", "DsoAppointment[]", paged=True)
     operation("get", "/appointments/mine", "患者本人预约", "DsoAppointment[]", paged=True)
     for endpoint in ['/appointments', '/appointments/mine']:
-        paths['/api/dso/v1' + endpoint]['get']['parameters'] += [{'name': name, 'in':'query', 'schema':date, 'description':'from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约'} for name in ['from','to']]
+        paths['/api/dso/v1' + endpoint]['get']['parameters'] += [{'name': name, 'in':'query', 'schema':date, 'description':'from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段'} for name in ['from','to']]
     operation("post", "/appointments", "患者预约时段；共享临床资料需显式同意", "DsoAppointment", {"slotId": field(), "shareWithDoctor": field("boolean", default=False)}, ["slotId"], idem=True)
     operation("get", "/appointments/{id}", "查看获授权预约", "DsoAppointment")
     operation("post", "/appointments/{id}/status", "有权限的状态转换；患者仅可取消未来本人预约", "DsoAppointment", {"version": version, "status": field(enum=["arrived", "completed", "cancelled", "no_show"])}, ["version", "status"])
@@ -97,6 +97,9 @@ def extend(paths, schemas):
     operation("post", "/operations/outbox/{id}/retry", "记录原因后重放死信，保持原事件 ID", body={"reason": field(minLength=1, maxLength=300)}, required=["reason"])
 
     import copy
+    paths["/api/dso/v1/patients/me"]["put"] = copy.deepcopy(paths["/api/dso/v1/patients/me"]["patch"])
+    paths["/api/dso/v1/patients/me"]["put"]["operationId"] = "dso_put_patients_me"
+    paths["/api/dso/v1/patients/me"]["put"]["summary"] = "完整替换本人资料；微信小程序兼容方法"
     staff = copy.deepcopy(paths['/api/v1/auth/mp-login']['post'])
     staff.update(summary='独立员工开发凭据登录；患者开发密钥无效', operationId='post_auth_staff_login')
     staff['parameters'] = [{'name':'X-Staff-Dev-Key','in':'header','required':True,'schema':field(minLength=32,maxLength=256)}]
@@ -114,3 +117,5 @@ def extend(paths, schemas):
             paths['/api/v1/' + suffix] = copy.deepcopy(source)
             for op in paths['/api/v1/' + suffix].values():
                 op['operationId'] = 'mini_' + op['operationId']
+
+    paths["/api/v1/appointments"].pop("get", None)

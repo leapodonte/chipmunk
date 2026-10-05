@@ -16,6 +16,7 @@ public static class Idempotency
 
     public static async Task<JsonObject> Run(Store store, User user, HttpContext context, string scope, JsonObject body, Func<Task<JsonObject>> action)
     {
+        scope = scope + ":" + user.Tenant + ":" + user.Clinic;
         var key = context.Request.Headers["Idempotency-Key"].ToString();
         if (string.IsNullOrWhiteSpace(key) || key.Length > 128)
             throw new ApiError(400, "此操作需要1–128字符的Idempotency-Key", "A 1–128 character Idempotency-Key is required");

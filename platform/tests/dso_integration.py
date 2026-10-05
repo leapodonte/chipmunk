@@ -13,6 +13,7 @@ import subprocess
 import struct
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -80,10 +81,10 @@ def upload(grant, data, expected=200):
         return result.get("data")
 
 
-def wide_png(width):
+def wide_png(width, height=1):
     def chunk(kind, payload):
         return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload))
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, 1, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\0" + b"\0" * width * 4)) + chunk(b"IEND", b"")
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress((b"\0" + b"\0" * width * 4) * height)) + chunk(b"IEND", b"")
 
 
 class DsoTests(unittest.TestCase):
@@ -136,13 +137,17 @@ class DsoTests(unittest.TestCase):
 
     def test_01_existing_schema_upgrade_and_restart_ledger(self):
         global BASE
-        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "6")
+        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "7")
         self.assertEqual(sql("SELECT role FROM platform_role_assignment WHERE user_id='legacy_user'").stdout.strip(), "patient")
         self.assertEqual(sql("SELECT clinic_id FROM platform_session WHERE user_id='legacy_user'").stdout.strip(), "clinic_demo")
         violations = sql("INSERT INTO platform_resource(id,tenant_id,clinic_id,owner_id,kind,body) VALUES('bad','tenant_foreign','clinic_demo',NULL,'test','{}')", check=False)
         self.assertNotEqual(violations.returncode, 0)
         self.assertIn("foreign key", violations.stderr)
         sql("INSERT INTO platform_session(token_hash,user_id,clinic_id,expires_at) VALUES('maintenance-expired','legacy_user','clinic_demo',now()-interval '9 days'); INSERT INTO platform_rate_limit(scope,bucket,count,expires_at) VALUES('maintenance-expired',0,1,now()-interval '1 day')")
+        legacy_start = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=50)
+        legacy_body = {"doctorId":"d_001","startsAt":legacy_start.isoformat(),"endsAt":(legacy_start+dt.timedelta(minutes=15)).isoformat()}
+        legacy_slot = call('/api/dso/v1/slots', self.staff['manager'], 'POST', legacy_body, {'Idempotency-Key':'legacy-clinic-replay'})
+        sql("UPDATE platform_idempotency SET scope='slots.create' WHERE user_id='staff_demo_manager' AND key='legacy-clinic-replay'; DELETE FROM platform_migration WHERE version='007_clinic_idempotency.sql'")
         command("docker", "restart", API)
         BASE = "http://127.0.0.1:" + command("docker", "port", API, "8080/tcp").stdout.strip().rsplit(":", 1)[1]
         for _ in range(60):
@@ -153,7 +158,8 @@ class DsoTests(unittest.TestCase):
                 time.sleep(0.25)
         else:
             self.fail("API did not recover after restart")
-        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "6")
+        self.assertEqual(sql("SELECT count(*) FROM platform_migration").stdout.strip(), "7")
+        self.assertEqual(call('/api/dso/v1/slots', self.staff['manager'], 'POST', legacy_body, {'Idempotency-Key':'legacy-clinic-replay'})['id'], legacy_slot['id'])
         for _ in range(20):
             if sql("SELECT (SELECT count(*) FROM platform_session WHERE token_hash='maintenance-expired')+(SELECT count(*) FROM platform_rate_limit WHERE scope='maintenance-expired')").stdout.strip() == "0":
                 break
@@ -212,6 +218,13 @@ class DsoTests(unittest.TestCase):
         upload(corrupt, PNG[:24], expected=400)
         huge = call("/api/v1/media/upload-token", self.alice, "POST", {"scene": "ai_photo", "ext": "png"})
         upload(huge, wide_png(5000), expected=400)
+        maximum = call('/api/v1/media/upload-token', self.alice, 'POST', {'scene':'ai_photo','ext':'png'})
+        large = wide_png(4000,3000)
+        self.assertEqual(upload(maximum, large)['size'], len(large))
+        maximum_metadata = json.loads(sql("SELECT body::text FROM platform_resource WHERE id='" + maximum['objectKey'].rsplit('/',1)[1].split('.')[0] + "'").stdout.strip())
+        self.assertEqual((maximum_metadata['width'],maximum_metadata['height']),(4000,3000))
+        over_pixels = call('/api/v1/media/upload-token', self.alice, 'POST', {'scene':'ai_photo','ext':'png'})
+        upload(over_pixels, wide_png(4000,3001), expected=400)
         broken = call("/api/v1/media/upload-token", self.alice, "POST", {"scene": "ai_photo", "ext": "png"})
         identifier = broken["objectKey"].rsplit("/", 1)[1].split(".")[0]
         sql("CREATE FUNCTION force_test_media_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.id='" + identifier + "' THEN RAISE EXCEPTION 'Synthetic media persistence failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_media_failure BEFORE UPDATE ON platform_resource FOR EACH ROW EXECUTE FUNCTION force_test_media_failure();")
@@ -317,7 +330,7 @@ class DsoTests(unittest.TestCase):
     def test_08_profile_versions_and_notifications(self):
         profile = call("/api/v1/patients/me", self.alice)
         body = {"displayName": "Synthetic Alice", "profile": {"allergies": "Synthetic only"}, "version": profile["version"]}
-        updated = call("/api/v1/patients/me", self.alice, "PATCH", body)
+        updated = call("/api/v1/patients/me", self.alice, "PUT", body)
         self.assertEqual(updated["version"], profile["version"] + 1)
         call("/api/v1/patients/me", self.alice, "PATCH", body, expected=409)
         manager_view = call("/api/dso/v1/patients/" + self.patient, self.staff["manager"])
@@ -335,8 +348,11 @@ class DsoTests(unittest.TestCase):
         self.assertEqual([row['id'] for row in rows], [booking['id']])
         empty = urllib.parse.urlencode({'from': (end + dt.timedelta(hours=1)).isoformat(), 'to': (end + dt.timedelta(hours=2)).isoformat()})
         self.assertEqual(call('/api/dso/v1/appointments?' + empty, self.staff['doctor']), [])
+        self.assertEqual([row['id'] for row in call('/api/v1/slots?' + query, self.alice)], [slot['id']])
+        self.assertEqual(call('/api/v1/slots?' + empty, self.alice), [])
         invalid = urllib.parse.urlencode({'from': start.isoformat(), 'to': (start + dt.timedelta(days=94)).isoformat()})
         call('/api/dso/v1/appointments?' + invalid, self.staff['doctor'], expected=400)
+        call('/api/v1/slots?' + invalid, self.alice, expected=400)
         call('/api/dso/v1/appointments?from=2026-10-01', self.staff['doctor'], expected=400)
         doctors = call('/api/dso/v1/doctors', self.staff['doctor'])
         self.assertEqual([doctor['id'] for doctor in doctors if doctor['canSchedule']], ['d_001'])
@@ -354,8 +370,12 @@ class DsoTests(unittest.TestCase):
         self.assertEqual({clinic['id'] for clinic in call('/api/dso/v1/clinics/mine', regional)}, {'clinic_demo','clinic_second'})
         call('/api/dso/v1/context/switch', regional, 'POST', {'clinicId':'clinic_other'}, expected=404)
         call('/api/dso/v1/context/switch', self.staff['doctor'], 'POST', {'clinicId':'clinic_second'}, expected=404)
+        first_lead = call('/api/dso/v1/crm/leads', regional, 'POST', {'title':'Synthetic shared idempotency key'}, {'Idempotency-Key':'clinic-scoped-lead'})
         call('/api/dso/v1/context/switch', regional, 'POST', {'clinicId':'clinic_second'})
         self.assertEqual(call('/api/dso/v1/context', regional)['roles'], ['regional_manager'])
+        second_lead = call('/api/dso/v1/crm/leads', regional, 'POST', {'title':'Synthetic shared idempotency key'}, {'Idempotency-Key':'clinic-scoped-lead'})
+        self.assertNotEqual(first_lead['id'], second_lead['id'])
+        call('/api/dso/v1/crm/leads/' + first_lead['id'], regional, expected=404)
         second_patient = call('/api/dso/v1/patients/me', second_token)['id']
         self.assertEqual([row['id'] for row in call('/api/dso/v1/patients', regional)], [second_patient])
         call('/api/dso/v1/patients/' + self.patient, regional, expected=404)
@@ -366,6 +386,7 @@ class DsoTests(unittest.TestCase):
         self.assertEqual(call('/api/dso/v1/appointments', regional)[0]['id'], appointment['id'])
         call('/api/dso/v1/context/switch', regional, 'POST', {'clinicId':'clinic_demo'})
         call('/api/dso/v1/appointments/' + appointment['id'], regional, expected=404)
+        self.assertEqual(call('/api/dso/v1/crm/leads', regional, 'POST', {'title':'Synthetic shared idempotency key'}, {'Idempotency-Key':'clinic-scoped-lead'})['id'], first_lead['id'])
 
     def test_15_json_object_limits_and_duplicate_fields(self):
         for payload, expected in [(b'null',400),(b'[]',400),(b'{"identity":"staff:doctor","identity":"staff:manager"}',400),(b'{"nested":{"x":1,"x":2}}',400),(b'{"padding":"'+b'x'*65536+b'"}',413)]:
@@ -374,6 +395,33 @@ class DsoTests(unittest.TestCase):
                 urllib.request.urlopen(req, timeout=10)
             self.assertEqual(caught.exception.code, expected)
         call("/api/dso/v1/context", self.staff["doctor"])
+
+    def test_16_upload_admission_releases_after_slow_clients(self):
+        grants = [call('/api/v1/media/upload-token', token, 'POST', {'scene':'ai_photo','ext':'png'}) for token in [self.alice,self.bob,self.alice]]
+        release = threading.Event()
+        def slow_upload(grant):
+            url = urllib.parse.urlsplit(grant['uploadUrl'])
+            def chunks():
+                yield PNG[:24]
+                release.wait(5)
+                yield PNG[24:]
+            req = urllib.request.Request(BASE+url.path+'?'+url.query, data=chunks(), headers={'Content-Type':'image/png'}, method='PUT')
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return response.status
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(slow_upload, grant) for grant in grants[:2]]
+            try:
+                for attempt in range(30):
+                    busy = int(sql("SELECT count(*) FROM pg_stat_activity WHERE datname='dso_test' AND state='idle in transaction' AND query LIKE '%r.body::text%'").stdout.strip())
+                    if busy >= 2: break
+                    time.sleep(0.05)
+                else: self.fail('Both slow uploads must be admitted before testing the capacity bound')
+                self.assertEqual(upload(grants[2], PNG, expected=429), None)
+                self.assertEqual(request('/health')[0], 200)
+            finally:
+                release.set()
+            self.assertEqual([future.result() for future in futures], [200,200])
+        self.assertEqual(upload(grants[2], PNG)['size'], len(PNG))
 
     def test_99_failed_login_counts_survive_rollback(self):
         statuses = [request("/api/v1/auth/staff-login", method="POST", body={"identity": "staff:doctor"}, headers={"X-Staff-Dev-Key": "wrong"})[0] for _ in range(61)]

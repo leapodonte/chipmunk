@@ -7,6 +7,23 @@ namespace Chipmunk.Platform;
 public static class Media
 {
     public const int MaximumBytes = 10 * 1024 * 1024;
+    private static readonly SemaphoreSlim Uploads = new(2, 2);
+    // 在读取正文、取得数据库连接或分配解码内存之前限制并行上传。
+    public static IDisposable? AcquireUpload(HttpContext context)
+    {
+        if (context.Request.Method == "GET") return null;
+        if (!Uploads.Wait(0))
+        {
+            context.Response.Headers.RetryAfter = "2";
+            throw new ApiError(429, "上传繁忙，请稍后重试", "Upload capacity is busy; retry shortly");
+        }
+        return new UploadLease();
+    }
+    private sealed class UploadLease : IDisposable
+    {
+        private int released;
+        public void Dispose() { if (Interlocked.Exchange(ref released, 1) == 0) Uploads.Release(); }
+    }
     private static string Sign(IConfiguration config, string action, string id, long expires) => Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(Auth.Secret(config, "MEDIA_SIGNING_KEY")), Encoding.UTF8.GetBytes($"{action}:{id}:{expires}"))).ToLowerInvariant();
     private static string Base(IConfiguration config) => (config["PUBLIC_URL"] ?? "https://app.smilelab.ai").TrimEnd('/');
     public static string Download(IConfiguration config, JsonObject media)

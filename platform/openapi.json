@@ -2721,7 +2721,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           },
           {
             "name": "to",
@@ -2730,7 +2730,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           }
         ],
         "responses": {
@@ -5605,7 +5605,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           },
           {
             "name": "to",
@@ -5614,7 +5614,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           }
         ],
         "responses": {
@@ -5918,7 +5918,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           },
           {
             "name": "to",
@@ -5927,7 +5927,7 @@
               "type": "string",
               "format": "date-time"
             },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
+            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约或时段"
           }
         ],
         "responses": {
@@ -6592,6 +6592,199 @@
           "DSO / patients"
         ],
         "operationId": "dso_patch_patients_me",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DsoPatient"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据无效或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不在授权范围",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "幂等、版本或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "正文超过64KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "频控",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "profile": {
+                    "type": "object",
+                    "properties": {
+                      "gender": {
+                        "type": "string",
+                        "enum": [
+                          "male",
+                          "female",
+                          "other",
+                          "unknown"
+                        ]
+                      },
+                      "birthDate": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "allergies": {
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "medicalHistory": {
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "emergencyContact": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "phone": {
+                            "type": "string",
+                            "maxLength": 32
+                          },
+                          "relationship": {
+                            "type": "string",
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "phone"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "displayName",
+                  "profile",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "完整替换本人资料；微信小程序兼容方法",
+        "tags": [
+          "DSO / patients"
+        ],
+        "operationId": "dso_put_patients_me",
         "security": [
           {
             "bearerAuth": []
@@ -10383,6 +10576,199 @@
             }
           }
         }
+      },
+      "put": {
+        "summary": "完整替换本人资料；微信小程序兼容方法",
+        "tags": [
+          "DSO / patients"
+        ],
+        "operationId": "mini_dso_put_patients_me",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DsoPatient"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "凭据无效或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或不在授权范围",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "幂等、版本或状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "正文超过64KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "频控",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "profile": {
+                    "type": "object",
+                    "properties": {
+                      "gender": {
+                        "type": "string",
+                        "enum": [
+                          "male",
+                          "female",
+                          "other",
+                          "unknown"
+                        ]
+                      },
+                      "birthDate": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "allergies": {
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "medicalHistory": {
+                        "type": "string",
+                        "maxLength": 3000
+                      },
+                      "emergencyContact": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 100
+                          },
+                          "phone": {
+                            "type": "string",
+                            "maxLength": 32
+                          },
+                          "relationship": {
+                            "type": "string",
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "phone"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "displayName",
+                  "profile",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/patients/me/care-team": {
@@ -10816,165 +11202,6 @@
       }
     },
     "/api/v1/appointments": {
-      "get": {
-        "summary": "员工按权限查看门诊预约",
-        "tags": [
-          "DSO / appointments"
-        ],
-        "operationId": "mini_dso_get_appointments",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 10000,
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20
-            }
-          },
-          {
-            "name": "from",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "description": "from/to 必须同时传入，正区间最长93天；返回与区间重叠的预约"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "data": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/DsoAppointment"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "参数无效",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "凭据无效或过期",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "角色权限不足",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在或不在授权范围",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "幂等、版本或状态冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "正文超过64KiB",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "频控",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "服务器错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope"
-                }
-              }
-            }
-          }
-        }
-      },
       "post": {
         "summary": "患者预约时段；共享临床资料需显式同意",
         "tags": [

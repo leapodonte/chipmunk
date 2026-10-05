@@ -26,6 +26,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run test --workspace @smilelab/client
       - run: npm run build --workspace backend
       - name: Verify generated developer contract
         run: |

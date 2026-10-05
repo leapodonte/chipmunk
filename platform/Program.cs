@@ -66,6 +66,7 @@ app.MapGet("/api/docs", () => Results.Content("""
 <p>开发登录需要单独交付的 X-Dev-Key。AI 模拟只返回原图占位，短信不发送；请使用测试数据。</p></html>
 """, "text/html; charset=utf-8"));
 app.MapMethods("/storage/objects/{id}", ["POST", "PUT", "GET"], async (string id, HttpContext ctx, NpgsqlDataSource source, RateLimitSource rates) => {
+    using var uploadLease = Media.AcquireUpload(ctx);
     await using var c = await source.OpenConnectionAsync(); await using var tx = await c.BeginTransactionAsync();
     try
     {
@@ -85,7 +86,7 @@ app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = context => {
 app.MapGet("/workspace", (HttpContext ctx) => ctx.Request.Path.Value?.EndsWith('/') == true
     ? Results.File(Path.Combine(AppContext.BaseDirectory, "wwwroot", "workspace", "index.html"), "text/html; charset=utf-8")
     : Results.Redirect("/workspace/"));
-app.MapMethods("/api/v1/{**endpoint}", ["GET", "POST", "PATCH", "DELETE"], async (string endpoint, HttpContext ctx, NpgsqlDataSource source, RateLimitSource rates) => {
+app.MapMethods("/api/v1/{**endpoint}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async (string endpoint, HttpContext ctx, NpgsqlDataSource source, RateLimitSource rates) => {
     await using var c = await source.OpenConnectionAsync(); await using var tx = await c.BeginTransactionAsync();
     var store = new Store(c, rates.Source);
     var body = await ApiBody.Read(ctx);
@@ -94,7 +95,7 @@ app.MapMethods("/api/v1/{**endpoint}", ["GET", "POST", "PATCH", "DELETE"], async
     await tx.CommitAsync();
     return Results.Json(new { code = 0, message = "ok", data });
 });
-app.MapMethods("/api/dso/v1/{**endpoint}", ["GET", "POST", "PATCH", "DELETE"], async (string endpoint, HttpContext ctx, NpgsqlDataSource source, RateLimitSource rates) => {
+app.MapMethods("/api/dso/v1/{**endpoint}", ["GET", "POST", "PUT", "PATCH", "DELETE"], async (string endpoint, HttpContext ctx, NpgsqlDataSource source, RateLimitSource rates) => {
     await using var c = await source.OpenConnectionAsync(); await using var tx = await c.BeginTransactionAsync();
     var store = new Store(c, rates.Source);
     var data = await new DsoApi(store, config, ctx).Handle(endpoint.Trim('/'), await ApiBody.Read(ctx));

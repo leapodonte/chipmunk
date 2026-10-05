@@ -143,11 +143,12 @@ public sealed class MiniApi(Store store, IConfiguration config, HttpContext cont
     private async Task<JsonObject> Checkin(User user, JsonObject body)
     {
         if (await CurrentTreatment(user) is null) throw new ApiError(409, "请先绑定医生", "Bind a doctor before check-in");
+        var scope = "checkin:" + user.Tenant + ":" + user.Clinic;
         var key = context.Request.Headers["Idempotency-Key"].ToString();
         if (key.Length > 128) throw new ApiError(400, "幂等键过长", "Idempotency key exceeds 128 characters");
         if (key != "")
         {
-            var previous = await store.Rows("SELECT body_hash,result::text FROM platform_idempotency WHERE user_id=@user AND scope='checkin' AND key=@key", ("user", user.Id), ("key", key));
+            var previous = await store.Rows("SELECT body_hash,result::text FROM platform_idempotency WHERE user_id=@user AND scope=@scope AND key=@key", ("user", user.Id), ("scope", scope), ("key", key));
             if (previous.Count != 0) { if (previous[0][0] != Auth.Hash(body.ToJsonString())) throw new ApiError(409, "幂等键对应其他请求", "Idempotency key reused with different body"); return JsonNode.Parse(previous[0][1])!.AsObject(); }
         }
         var events = await store.List(user, "checkin");
@@ -158,7 +159,7 @@ public sealed class MiniApi(Store store, IConfiguration config, HttpContext cont
         var record = await store.Add(user, "checkin", new JsonObject { ["type"] = type, ["imageKey"] = imageKey, ["time"] = Now.ToString("O"), ["date"] = Now.ToString("yyyy-MM-dd"), ["epoch"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
         await store.Audit(user, context, "checkin.created", S(record, "id"));
         var status = await CheckinStatus(user);
-        if (key != "") await store.Execute("INSERT INTO platform_idempotency(user_id,scope,key,body_hash,result) VALUES(@user,'checkin',@key,@hash,CAST(@result AS jsonb))", ("user", user.Id), ("key", key), ("hash", Auth.Hash(body.ToJsonString())), ("result", status.ToJsonString()));
+        if (key != "") await store.Execute("INSERT INTO platform_idempotency(user_id,scope,key,body_hash,result) VALUES(@user,@scope,@key,@hash,CAST(@result AS jsonb))", ("user", user.Id), ("scope", scope), ("key", key), ("hash", Auth.Hash(body.ToJsonString())), ("result", status.ToJsonString()));
         return status;
     }
     private async Task<JsonObject> CheckinStatus(User user)

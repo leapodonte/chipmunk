@@ -246,11 +246,11 @@ X-Staff-Dev-Key: <单独交付的该员工账号密钥>
 
 `GET /api/dso/v1/context` 返回可信的 `userId,tenantId,organizationId,clinicId,roles,environment`。**客户端提交的租户、角色或医生 ID 不授予权限。** `GET clinics/mine` 列出获授权门诊；`POST context/switch` 的正文为 `{"clinicId":"..."}`，成功后重新获取 context。切换只影响当前 token。
 
-统一成功响应 `{code:0,message:"ok",data:...}`。HTTP 状态与错误 `code` 一致；400 参数错误、401 会话过期、403 角色不足、404 不在资源授权范围、409 状态/版本/幂等冲突、413 正文过大、429 频控。使用响应头 `X-Request-Id` 定位问题。请求头 `Accept-Language: en` 返回英语错误；默认中文。业务 JSON 上限 64KiB。
+统一成功响应 `{code:0,message:"ok",data:...}`。HTTP 状态与错误 `code` 一致；400 参数错误、401 会话过期、403 角色不足、404 不在资源授权范围、409 状态/版本/幂等冲突、413 正文过大、429 频控。使用响应头 `X-Request-Id` 定位问题。请求头 `Accept-Language: en` 返回英语错误；默认中文。业务 JSON 上限 64KiB，正文必须是对象，重复属性名会被拒绝。
 
 ## 幂等、版本与分页
 
-创建时段、预约、病历、CRM 线索、跟进时，必须带 `Idempotency-Key`（1–128 字符，建议 UUID）。重试保持相同键及正文，返回原结果；同键改正文返回409。对象属性顺序不影响幂等哈希，数组顺序影响。幂等范围包含用户与业务操作，不能用其他员工的键访问资源。
+创建时段、预约、病历、CRM 线索、跟进时，必须带 `Idempotency-Key`（1–128 字符，建议 UUID）。重试保持相同键及正文，返回原结果；同键改正文返回409。对象属性顺序不影响幂等哈希，数组顺序影响。幂等范围包含用户、租户、当前门诊与业务操作，不能用其他员工的键访问资源。
 
 修改资源时提交上次读取的正整数 `version`。成功版本递增，409 后刷新并让用户确认新状态，不能自动覆盖。DSO 列表支持 `page`（默认1，最大10000）与 `pageSize`（默认20，最大100），返回数组。工作台每页20条，翻页时查询服务端；API 未返回总数，满页时提供下一页，精确整页的数据集可能出现一个空的末页。日历按可见日期范围独立加载，最多1000条，超过时提示缩小视图。预约与排班列表支持 `from`、`to`，范围不超过93天，按时间区间相交过滤。
 
@@ -275,7 +275,7 @@ X-Staff-Dev-Key: <单独交付的该员工账号密钥>
 
 ## 患者授权、档案和病历
 
-患者：`GET/PATCH /api/v1/patients/me`。更新示例：
+患者：`GET/PUT /api/v1/patients/me`（也接受 PATCH）。更新示例：
 
 ```json
 {"version":1,"displayName":"测试患者","profile":{"gender":"unknown","birthDate":"2000-01-01","allergies":"测试资料","medicalHistory":"测试资料","emergencyContact":{"name":"测试联系人","phone":"000000","relationship":"其他"}}}
@@ -322,7 +322,7 @@ content 支持 `chiefComplaint,history,examination,assessment,plan,toothChart`�
 
 ## 磁盘 OSS 与持久化 AI mock
 
-使用原小程序媒体接口：申请上传凭证→签名 PUT/POST→保存 objectKey→申请短期下载 URL。每文件10MiB、每患者100MiB，图片解码限制单边4096、总像素1200万、单帧；损坏图片和多帧图片拒绝。服务保存原始字节的 SHA-256、宽高、上传者、时间、租户、门诊与私有存储标记。上传后不能覆盖；数据库失败时清理本次新建磁盘文件。生产需另行安排病毒扫描、保留策略和异地备份。
+使用原小程序媒体接口：申请上传凭证→签名 PUT/POST→保存 objectKey→申请短期下载 URL。每文件10MiB、每患者100MiB，图片解码限制单边4096、总像素1200万、单帧；损坏图片和多帧图片拒绝。服务保存原始字节的 SHA-256、宽高、上传者、时间、租户、门诊与私有存储标记。上传后不能覆盖；数据库失败时清理本次新建磁盘文件。当前单 API 进程最多同时处理2个上传，繁忙时返回429和 `Retry-After: 2`，尚未读取正文或写入文件；客户端可延迟重试同一未过期凭证。生产需另行安排病毒扫描、保留策略和异地备份。
 
 `POST /api/v1/ai/simulations`，`{"imageKey":"本人已上传ai_photo的objectKey"}`。任务状态持久化，内部 `jobStatus` 为 queued/running/succeeded/failed/cancelled；兼容界面 `status` 为 analyzing/done/quality_failed。`GET ai/simulations/{taskId}` 轮询，`POST ai/simulations/{taskId}/cancel` 取消排队/运行任务，终态取消409。
 
@@ -344,3 +344,44 @@ const lead = await client.dso('crm/leads', 'POST', { title: '合成演示' }, ne
 完整镜像从仓库根目录构建：`docker build -f platform/Dockerfile.full -t chipmunk-platform:demo .`。独立集成测试 `python3 platform/tests/dso_integration.py --image <镜像>` 创建临时 Docker 网络和数据库，测试不会写线上数据；UI 测试需显式私有 fixture 路径和隔离环境 URL。迁移检查已应用脚本校验和，不运行旧系统 `--init`。员工首次配置使用 `tools/provision-dso-staff.py --output <私有路径>`，重复执行保留现有密钥，冲突回滚。
 
 开发环境尚未实现正式 SSO/MFA、真实短信/支付/AI、FHIR 数据交换、异地备份/PITR、自动租户开户和生产医疗合规流程。Odoo 已提供管理员维护的租户—公司映射；未映射或停用的租户事件会被拒绝。具体复用项目、许可与后续计划见 `DSO复用项目评估与组件决策.md`。
+
+## UniApp / 微信小程序联调
+
+`packages/smilelab-client/src/uni.ts` 提供 `SmilelabUniClient`，通过注入的 `uni.request` 和 `uni.uploadFile` 工作，不依赖浏览器 fetch、Response、AbortController 或本地存储。原生请求方法兼容性见 [DCloud 官方说明](https://en.uniapp.dcloud.io/api/request/request.html)：微信列有 PUT、DELETE，而不同小程序平台的支持不一致。本人资料完整替换提供 `PUT /api/v1/patients/me`；工作台 PATCH 保留。仅当前微信目标已准备，其他平台仍需适配。
+
+```ts
+import { SmilelabUniClient } from '@smilelab/client/uni';
+// 应用自己的会话状态；不要把开发密钥写入源码或正式小程序包。
+let token: string | null = null;
+const api = new SmilelabUniClient({
+  transport: {
+    request: options => uni.request(options),
+    uploadFile: options => uni.uploadFile(options),
+  },
+  token: () => token,
+  language: () => 'zh-Hans',
+});
+// 正式微信 code 来自 uni.login；当前需先配置服务端微信凭据。
+const auth = await api.demoLogin('demo:你的固定测试标识', 临时输入的开发密钥);
+token = auth.token;
+const profile = await api.profile();
+await api.updateProfile({ displayName: profile.displayName, version: profile.version, profile: {} });
+const slots = await api.slots({ doctorId: 'd_001', page: 1, pageSize: 20 });
+// 业务操作生成并保留一个唯一键；网络重试时复用同一个键及正文。
+const slot = slots.find(item => item.available);
+if (!slot) throw new Error('请先由门诊经理发布一个可预约时段');
+const booking = await api.book(slot.id, 患者明确选择共享给医生, 已保存的本次预约操作唯一键);
+const grant = await api.uploadGrant('ai_photo', 'png');
+const upload = api.upload(grant, 临时图片文件路径);
+const media = await upload.promise; // upload.cancel() 可终止原生传输
+const task = await api.simulate(media.objectKey);
+const result = await api.simulation(task.taskId); // 仅 jobStatus=succeeded 时展示完成
+```
+
+包导出 TypeScript 源码，使用项目 workspace 或源文件别名接入；TypeScript 设置 `moduleResolution: "Bundler"`、`allowImportingTsExtensions: true`、`noEmit: true`（由 UniApp 构建器产出）。上例的中文占位变量需要由页面提供；先登录获得 token 再执行个人接口。
+
+在微信后台为 request、uploadFile、downloadFile 配置 `https://app.smilelab.ai` 的合法域名。签名 URL、开发密钥和 Bearer token 不写入日志；图片 URL 只是短期访问能力，需持久保存 objectKey/mediaId，过期后通过本人媒体 URL 接口重新申请。SDK 不自动重试写入，也不自动接受医生共享：`book` 的 shareWithDoctor 由页面根据患者明确选择传入。
+
+错误为 `ApiError`，包含 HTTP status 与 requestId；原生网络/超时/取消的 status 为0。401清除会话并重新登录；409刷新资源并确认状态，不能自动覆盖。取消网络请求不保证服务器事务未提交，重试预约应保持原幂等键。已上传文件不能覆盖；响应丢失时先核对上传状态，不能直接无限重试。
+
+适配器已通过8个原生传输契约测试，服务端 PUT 和日期区间通过真实 PostgreSQL 测试。微信开发者工具、真机及正式 code 登录尚未验证；当前仓库 `app/` 仍是占位目录，本轮交付的是小程序后端与可复用联调组件。

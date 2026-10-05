@@ -43,7 +43,8 @@ public sealed class Appointments(Store store, User user, HttpContext context)
         var doctor = context.Request.Query["doctorId"].ToString();
         if (doctor != "") await access.Doctor(doctor);
         var (limit, offset) = access.Page();
-        return await access.JsonRows("SELECT jsonb_build_object('id',s.id,'doctorId',s.doctor_id,'startsAt',s.starts_at,'endsAt',s.ends_at,'available',NOT EXISTS(SELECT 1 FROM dso_appointment a WHERE a.slot_id=s.id AND a.status!='cancelled'))::text FROM dso_slot s WHERE s.tenant_id=@tenant AND s.clinic_id=@clinic AND s.status='open' AND s.starts_at>now() AND (@doctor='' OR s.doctor_id=@doctor) ORDER BY s.starts_at,s.id LIMIT @limit OFFSET @offset", ("doctor", doctor), ("limit", limit), ("offset", offset));
+        var (filtered, start, end) = Range();
+        return await access.JsonRows("SELECT jsonb_build_object('id',s.id,'doctorId',s.doctor_id,'startsAt',s.starts_at,'endsAt',s.ends_at,'available',NOT EXISTS(SELECT 1 FROM dso_appointment a WHERE a.slot_id=s.id AND a.status!='cancelled'))::text FROM dso_slot s WHERE s.tenant_id=@tenant AND s.clinic_id=@clinic AND s.status='open' AND s.starts_at>now() AND (@doctor='' OR s.doctor_id=@doctor) AND (NOT @filtered OR (s.starts_at<@end AND s.ends_at>@start)) ORDER BY s.starts_at,s.id LIMIT @limit OFFSET @offset", ("doctor", doctor), ("limit", limit), ("offset", offset), ("filtered", filtered), ("start", start.UtcDateTime), ("end", end.UtcDateTime));
     }
 
     public async Task<JsonObject> CloseSlot(string id)
@@ -95,12 +96,18 @@ public sealed class Appointments(Store store, User user, HttpContext context)
             predicate = user.Has("clinic_manager", "regional_manager", "platform_admin", "assistant") ? "TRUE" : "d.user_id=@actor";
         }
         var (limit, offset) = access.Page();
+        var (filtered, start, end) = Range();
+        return await access.JsonRows("SELECT " + Projection + "::text FROM dso_appointment a JOIN dso_slot s ON s.id=a.slot_id JOIN dso_patient p ON p.id=a.patient_id JOIN dso_doctor d ON d.id=s.doctor_id WHERE a.tenant_id=@tenant AND a.clinic_id=@clinic AND " + predicate + " AND (NOT @filtered OR (s.starts_at<@end AND s.ends_at>@start)) ORDER BY s.starts_at DESC,a.id LIMIT @limit OFFSET @offset", ("limit", limit), ("offset", offset), ("filtered", filtered), ("start", start.UtcDateTime), ("end", end.UtcDateTime));
+    }
+
+    private (bool Filtered, DateTimeOffset Start, DateTimeOffset End) Range()
+    {
         var range = new JsonObject { ["from"] = context.Request.Query["from"].ToString(), ["to"] = context.Request.Query["to"].ToString() };
         var filtered = range["from"]!.GetValue<string>() != "" || range["to"]!.GetValue<string>() != "";
         var start = filtered ? Validation.Time(range, "from") : DateTimeOffset.UtcNow;
         var end = filtered ? Validation.Time(range, "to") : start;
-        if (filtered && (end <= start || end - start > TimeSpan.FromDays(93))) throw new ApiError(400, "预约查询区间必须为不超过93天的正区间", "Appointment range must be positive and no longer than 93 days");
-        return await access.JsonRows("SELECT " + Projection + "::text FROM dso_appointment a JOIN dso_slot s ON s.id=a.slot_id JOIN dso_patient p ON p.id=a.patient_id JOIN dso_doctor d ON d.id=s.doctor_id WHERE a.tenant_id=@tenant AND a.clinic_id=@clinic AND " + predicate + " AND (NOT @filtered OR (s.starts_at<@end AND s.ends_at>@start)) ORDER BY s.starts_at DESC,a.id LIMIT @limit OFFSET @offset", ("limit", limit), ("offset", offset), ("filtered", filtered), ("start", start.UtcDateTime), ("end", end.UtcDateTime));
+        if (filtered && (end <= start || end - start > TimeSpan.FromDays(93))) throw new ApiError(400, "时间查询区间必须为不超过93天的正区间", "Time range must be positive and no longer than 93 days");
+        return (filtered, start, end);
     }
 
     public async Task<JsonObject> Get(string id, bool locked = false)
