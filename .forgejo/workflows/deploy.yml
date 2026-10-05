@@ -37,7 +37,8 @@ jobs:
           printf '%s\n' "$SMILELAB_SSH_KNOWN_HOSTS" > "$key_dir/known_hosts"
           unset SMILELAB_PUBLISH_KEY SMILELAB_SSH_KNOWN_HOSTS
           image="$(cat backend/test-results/validated-image.txt)"
-          docker image save "$image" | gzip -1 | ssh -T -i "$key_dir/key" \
+          # 按标签导出以保留唯一提交引用；配置 digest 仍由验证结果提供。
+          docker image save "chipmunk-platform:smilelab-$GITHUB_SHA" | gzip -1 | ssh -T -i "$key_dir/key" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$key_dir/known_hosts" -o ConnectTimeout=20 \
             dcad@dcad.ai "deploy-smilelab $GITHUB_SHA $image"

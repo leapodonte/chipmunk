@@ -1,6 +1,6 @@
 # Smilelab 推送自动发布
 
-源码仓库 https://git.dcad.ai/dcad/smilelab 的 `main` 是开发/演示发布分支。推送 main 自动运行 `.forgejo/workflows/deploy.yml`：SDK、生成契约、OpenAPI、完整镜像、隔离平台数据库、浏览器及真实 Odoo 桥接检查全部通过后，部署这个已验证的镜像 ID。`codex/**` 只验证；其他分支不自动发布。也可在 Actions 手动重跑 main。失败检查阻止发布。
+源码仓库 https://git.dcad.ai/dcad/smilelab 的 `main` 是开发/演示发布分支。推送 main 自动运行 `.forgejo/workflows/deploy.yml`：SDK、生成契约、OpenAPI、完整镜像、隔离平台数据库、浏览器及真实 Odoo 桥接检查全部通过后，部署这个已验证的镜像。`codex/**` 只验证；其他分支不自动发布。也可在 Actions 手动重跑 main。失败检查阻止发布。
 
 在已有本机仓库中：
 
@@ -22,7 +22,7 @@ git push origin main
 
 CI 在专属容器和独立 Docker-in-Docker daemon 内运行，未挂载 VPS Docker socket、运行数据卷、`/srv/dcad` 或运行秘密。只使用合成数据，测试完成清理临时容器和卷。runner 与 dind 共用容器网络和 CI 工作卷，所以测试的临时 loopback 端口与只读源码绑定可用；无 CI 主机端口。
 
-main 的成功检查通过受限 SSH 通道传送验证镜像。密钥只能执行基础设施的 `forgejo-deploy-smilelab.py`；拒绝 shell、任意参数、端口转发和其他仓库。服务端从 Forgejo 归档同一提交的源码，并核对镜像 revision/source 标签和内容 ID，然后调用规范 `deploy-smilelab.sh`。发布前保存完整一致快照，升级自有 Odoo 桥接并等待平台健康；保留管理员密码和员工密钥。付款继续为 demo。
+main 的成功检查通过受限 SSH 通道传送验证镜像。密钥只能执行基础设施的 `forgejo-deploy-smilelab.py`；拒绝 shell、任意参数、端口转发和其他仓库。服务端从 Forgejo 归档同一提交的源码，校验归档配置 SHA256、每个文件系统层 SHA256、revision/source 标签及导入后的运行配置和层，再调用规范 `deploy-smilelab.sh`。Docker28/29导入会规范化旧配置、改变本地镜像ID，元数据因此同时记录CI配置digest和主机ID；不会重建另一份产物。发布前保存完整一致快照，升级自有 Odoo 桥接并等待平台健康；保留管理员密码和员工密钥。付款继续为 demo。
 
 发布后自动检查两域名 HTTPS、工作台、订单契约、八员工角色、受保护的 ERP 路由和邻接服务。这些检查不创建患者、订单或临床/商业记录。测试失败无发布；发布升级失败保留红色运行和服务器日志/快照，不盲目回退已迁移的数据库。
 
