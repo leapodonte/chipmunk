@@ -73,6 +73,9 @@ test('制造订单工作台在手机视口和英文下可用', async ({ page }) 
   await page.setViewportSize({ width: 390, height: 844 }); await login(page, '制造人员', 'manufacturer');
   await page.getByRole('button', { name: 'English', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Shared orders', exact: true })).toBeVisible();
+  await expect(page.locator('.order-mobile-card').first().getByRole('button', { name: 'View progress', exact: true })).toBeVisible();
+  await page.locator('.order-mobile-card').first().getByRole('button', { name: 'View progress', exact: true }).click();
+  await expect(page.locator('.order-detail')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
   await page.screenshot({ path: 'test-results/shared-order-mobile-en.png', fullPage: true });
 });
