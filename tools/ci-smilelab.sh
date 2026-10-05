@@ -22,7 +22,7 @@ docker build --memory=3g --cpuset-cpus=0,1 \
     --label "org.opencontainers.image.revision=$GITHUB_SHA" \
     --label 'org.opencontainers.image.source=https://git.dcad.ai/dcad/smilelab' \
     -f platform/Dockerfile.full -t "$IMAGE" .
-python3 platform/tests/dso_integration.py --image "$IMAGE" --result backend/test-results/platform-summary.json \
+python3 platform/tests/dso_integration.py --image "$IMAGE" --result "$CI_TEMP/platform-summary.json" \
     --ui-handoff "$CI_TEMP/ui.json" --hold-seconds 600 > "$CI_TEMP/platform.log" 2>&1 &
 DSO_PID=$!
 for ((attempt=1; attempt<=150; attempt++)); do
@@ -44,6 +44,7 @@ npm run test:e2e --workspace backend
 touch "$CI_TEMP/ui.done"
 wait "$DSO_PID"
 DSO_PID=''
+cp "$CI_TEMP/platform-summary.json" backend/test-results/platform-summary.json
 cat backend/test-results/platform-summary.json
 python3 platform/tests/odoo_integration.py --result backend/test-results/odoo-summary.json
 cat backend/test-results/odoo-summary.json
