@@ -78,6 +78,10 @@ def main():
     subprocess.run(['sha256sum','-c','SHA256SUMS'],cwd=snapshot,check=True,stdout=subprocess.DEVNULL)
     image=(snapshot/'platform-image.txt').read_text().strip()
     if not re.fullmatch(r'sha256:[a-f0-9]{64}',image): raise SystemExit('Invalid snapshot image ID')
+    image_archive=snapshot/'platform-image.tar.gz'
+    if image_archive.exists():
+        command('docker','image','load','--input',str(image_archive))
+    assert command('docker','image','inspect','--format','{{.Id}}',image).stdout.strip()==image
     env=dict(line.split('=',1) for line in (snapshot/'chipmunk.env').read_text().splitlines() if '=' in line)
     credentials=json.loads((snapshot/'staff-demo.json').read_text())
     REDACTIONS=[*env.values(),*(account['key'] for account in credentials['accounts'].values())]
@@ -154,7 +158,7 @@ def main():
                 assert hashlib.sha256(data).hexdigest()==obj['sha256'];verified+=1
             with urllib.request.urlopen(abase+'/workspace/',timeout=20) as response:
                 assert b'<div id="app">' in response.read()
-            report={'snapshot':snapshot.name,'isolated':True,'databasesRestored':2,'apiHealthy':True,'odooAdminLogin':True,'bridgeDelivery':True,'staffAccountsVerified':len(tokens),'mediaDownloadsHashVerified':verified,'workspaceLoaded':True,'elapsedSeconds':round(time.monotonic()-started,1),'limitations':['same-host recovery rehearsal; no replacement VPS or offsite backup']}
+            report={'snapshot':snapshot.name,'isolated':True,'imageArchiveLoaded':image_archive.exists(),'databasesRestored':2,'apiHealthy':True,'odooAdminLogin':True,'bridgeDelivery':True,'staffAccountsVerified':len(tokens),'mediaDownloadsHashVerified':verified,'workspaceLoaded':True,'elapsedSeconds':round(time.monotonic()-started,1),'limitations':['same-host recovery rehearsal; no replacement VPS or offsite backup']}
             Path(args.output).write_text(json.dumps(report,indent=2)+'\n')
             print(json.dumps(report))
         finally:

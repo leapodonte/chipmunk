@@ -423,6 +423,24 @@ class DsoTests(unittest.TestCase):
             self.assertEqual([future.result() for future in futures], [200,200])
         self.assertEqual(upload(grants[2], PNG)['size'], len(PNG))
 
+    def test_17_cross_origin_trace_headers_and_put_preflight(self):
+        origin = 'http://localhost:5173'
+        req = urllib.request.Request(BASE+'/api/dso/v1/context', headers={'Origin':origin,'Authorization':'Bearer '+self.staff['doctor']})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            self.assertEqual(response.headers['Access-Control-Allow-Origin'], origin)
+            exposed = response.headers['Access-Control-Expose-Headers'].lower()
+            self.assertIn('x-request-id', exposed)
+            self.assertIn('retry-after', exposed)
+            self.assertTrue(response.headers['X-Request-Id'])
+            self.assertIsNone(response.headers.get('Access-Control-Allow-Credentials'))
+        preflight = urllib.request.Request(BASE+'/api/v1/patients/me', headers={'Origin':origin,'Access-Control-Request-Method':'PUT','Access-Control-Request-Headers':'authorization,content-type'}, method='OPTIONS')
+        with urllib.request.urlopen(preflight, timeout=10) as response:
+            self.assertEqual(response.status,204)
+            self.assertIn('PUT',response.headers['Access-Control-Allow-Methods'])
+        disallowed = urllib.request.Request(BASE+'/api/dso/v1/context', headers={'Origin':'https://untrusted.invalid','Authorization':'Bearer '+self.staff['doctor']})
+        with urllib.request.urlopen(disallowed, timeout=10) as response:
+            self.assertIsNone(response.headers.get('Access-Control-Allow-Origin'))
+
     def test_99_failed_login_counts_survive_rollback(self):
         statuses = [request("/api/v1/auth/staff-login", method="POST", body={"identity": "staff:doctor"}, headers={"X-Staff-Dev-Key": "wrong"})[0] for _ in range(61)]
         self.assertIn(401, statuses)

@@ -19,7 +19,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o => {
     // 只信任独立内部 Docker 网络；服务不发布任何主机端口。
     o.KnownIPNetworks.Add(new System.Net.IPNetwork(System.Net.IPAddress.Parse("172.18.0.0"), 16));
 });
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins((builder.Configuration["CORS_ORIGINS"] ?? "https://app.smilelab.ai,http://localhost:5173,http://localhost:8080").Split(',')).WithHeaders("Authorization", "Content-Type", "X-Dev-Key", "X-Staff-Dev-Key", "Idempotency-Key").WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")));
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins((builder.Configuration["CORS_ORIGINS"] ?? "https://app.smilelab.ai,http://localhost:5173,http://localhost:8080").Split(',')).WithHeaders("Authorization", "Content-Type", "X-Dev-Key", "X-Staff-Dev-Key", "Idempotency-Key").WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS").WithExposedHeaders("X-Request-Id", "Retry-After")));
 var config = builder.Configuration;
 Auth.Secret(config, "DEV_API_KEY"); Auth.Secret(config, "MEDIA_SIGNING_KEY");
 var connectionString = config["PLATFORM_DATABASE"] ?? throw new InvalidOperationException("PLATFORM_DATABASE required");
