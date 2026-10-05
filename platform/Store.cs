@@ -5,7 +5,7 @@ using NpgsqlTypes;
 namespace Chipmunk.Platform;
 
 // 所有平台查询限定租户、门诊和资源所有者，Odoo 不访问平台数据库。
-public sealed class Store(NpgsqlConnection connection)
+public sealed class Store(NpgsqlConnection connection, NpgsqlDataSource? rateSource = null)
 {
     public async Task<int> Execute(string sql, params (string, object?)[] values)
     {
@@ -62,21 +62,34 @@ public sealed class Store(NpgsqlConnection connection)
     public Task Update(User user, JsonObject body) => Execute(
         "UPDATE platform_resource SET body=CAST(@body AS jsonb) WHERE id=@id AND tenant_id=@tenant AND clinic_id=@clinic AND owner_id=@owner",
         ("body", body.ToJsonString()), ("id", body["id"]!.GetValue<string>()), ("tenant", user.Tenant), ("clinic", user.Clinic), ("owner", user.Id));
-    public Task Audit(User user, HttpContext context, string action, string resource) => Execute(
-        "INSERT INTO platform_audit(tenant_id,user_id,action,resource_id,ip,request_id) VALUES(@tenant,@user,@action,@resource,@ip,@request)",
+    public Task Audit(User user, HttpContext context, string action, string resource, JsonObject? details = null) => Execute(
+        "INSERT INTO platform_audit(tenant_id,clinic_id,user_id,action,resource_id,ip,request_id,details) VALUES(@tenant,@clinic,@user,@action,@resource,@ip,@request,CAST(@details AS jsonb))",
         ("tenant", user.Tenant), ("user", user.Id), ("action", action), ("resource", resource),
+        ("clinic", user.Clinic), ("details", (details ?? new JsonObject()).ToJsonString()),
         ("ip", context.Connection.RemoteIpAddress?.ToString() ?? ""), ("request", context.TraceIdentifier));
     public async Task Rate(string scope, int maximum, int seconds = 3600)
     {
         var bucket = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / seconds;
-        var rows = await Rows("INSERT INTO platform_rate_limit(scope,bucket,count) VALUES(@scope,@bucket,1) ON CONFLICT(scope,bucket) DO UPDATE SET count=platform_rate_limit.count+1 RETURNING count",
+        // 安全计数独立提交；业务失败/回滚仍然消耗限流额度。
+        if (rateSource is null) throw new InvalidOperationException("Rate limiter requires its data source");
+        await using var rateConnection = await rateSource.OpenConnectionAsync();
+        var rows = await new Store(rateConnection).Rows("INSERT INTO platform_rate_limit(scope,bucket,count) VALUES(@scope,@bucket,1) ON CONFLICT(scope,bucket) DO UPDATE SET count=platform_rate_limit.count+1 RETURNING count",
             ("scope", scope), ("bucket", bucket));
         if (int.Parse(rows[0][0]) > maximum) throw new ApiError(429, "请求过于频繁", "Rate limit exceeded");
     }
     public static JsonArray Array(IEnumerable<JsonObject> values) => new(values.Select(x => (JsonNode)x.DeepClone()).ToArray());
 }
 
-public sealed record User(string Id, string Tenant, string Clinic, string Nickname, string Phone);
+public sealed record User(string Id, string Tenant, string Clinic, string Nickname, string Phone,
+    string Organization = "", string[]? GrantedRoles = null)
+{
+    public string[] Roles => GrantedRoles ?? ["patient"];
+    public bool Has(params string[] roles) => Roles.Intersect(roles, StringComparer.Ordinal).Any();
+    public void Require(params string[] roles)
+    {
+        if (!Has(roles)) throw new ApiError(403, "当前角色无权执行此操作", "Your role does not allow this action");
+    }
+}
 public sealed class ApiError(int status, string chinese, string english) : Exception(chinese)
 {
     public int Status { get; } = status;

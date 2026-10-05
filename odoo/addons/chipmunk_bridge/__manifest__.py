@@ -1,9 +1,9 @@
 {
     'name': 'Chipmunk Enterprise Integration',
     'author': 'Smilelab',
-    'version': '19.0.1.0.0',
+    'version': '19.0.2.0.0',
     'license': 'LGPL-3',
     'depends': ['crm', 'sale_management', 'purchase', 'stock', 'hr', 'account'],
-    'data': ['security/ir.model.access.csv'],
+    'data': ['security/ir.model.access.csv', 'data/tenant_company.xml', 'views/integration.xml'],
     'installable': True,
 }

@@ -1,0 +1,99 @@
+name: DSO platform validation
+
+on:
+  push:
+    branches: [main, 'codex/**']
+    paths: ['platform/**', 'backend/**', 'packages/**', 'odoo/**', 'tools/**', 'doc/**', 'package*.json', '.dockerignore', '.github/workflows/dso.yml']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dso-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform-and-workspace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build --workspace backend
+      - name: Verify generated developer contract
+        run: |
+          python3 tools/generate-openapi.py
+          git diff --exit-code -- platform/openapi.json platform/DeveloperGuide.md
+          python3 -m pip install --quiet openapi-spec-validator==0.7.2
+          python3 -m openapi_spec_validator platform/openapi.json
+      - name: Install isolated browser runtime
+        run: npx playwright install --with-deps chromium
+        working-directory: backend
+      - name: Build complete API and workspace image
+        run: docker build -f platform/Dockerfile.full -t chipmunk-platform:dso-ci .
+      - name: Database workflows, delivery recovery and browser workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 platform/tests/dso_integration.py --image chipmunk-platform:dso-ci --result /tmp/smilelab-dso-tests.json --ui-handoff /tmp/smilelab-dso-ui.json --hold-seconds 600 >/tmp/smilelab-dso-tests.log 2>&1 &
+          dso_pid=$!
+          cleanup() { touch /tmp/smilelab-dso-ui.done; wait "$dso_pid" || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 150); do
+            if [ -f /tmp/smilelab-dso-ui.json ]; then break; fi
+            if ! kill -0 "$dso_pid" 2>/dev/null; then cat /tmp/smilelab-dso-tests.log; exit 1; fi
+            sleep 2
+          done
+          test -f /tmp/smilelab-dso-ui.json
+          # 临时账号也登记日志屏蔽，凭据文件及完整失败上下文不上传。
+          python3 - <<'PY'
+          import json
+          data = json.load(open('/tmp/smilelab-dso-ui.json'))
+          for value in [data['devKey'], data['aliceToken'], *data['staffKeys'].values(), *data['staffTokens'].values()]:
+              print('::add-mask::' + value)
+          PY
+          export DSO_TEST_CREDENTIALS=/tmp/smilelab-dso-ui.json
+          export SMILELAB_TEST_URL="$(python3 -c "import json; print(json.load(open('/tmp/smilelab-dso-ui.json'))['apiBase'])")"
+          npm run test:e2e --workspace backend
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('backend/test-results/results.json').read_text())
+          Path('backend/test-results/summary.json').write_text(json.dumps(report['stats'], indent=2) + '\n')
+          PY
+          touch /tmp/smilelab-dso-ui.done
+          wait "$dso_pid"
+          trap - EXIT
+          cat /tmp/smilelab-dso-tests.json
+      - name: Upload synthetic test evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dso-workflow-evidence
+          retention-days: 7
+          path: |
+            /tmp/smilelab-dso-tests.json
+            backend/test-results/summary.json
+            backend/test-results/*.png
+
+  real-odoo-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Real Odoo company isolation and replay concurrency
+        run: python3 platform/tests/odoo_integration.py
+      - name: Upload bridge test report
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: real-odoo-bridge-evidence
+          retention-days: 7
+          path: /tmp/smilelab-odoo-tests.json

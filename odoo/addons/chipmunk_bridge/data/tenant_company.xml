@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+  <record id="tenant_demo_company" model="chipmunk.tenant.company">
+    <field name="tenant_id">tenant_demo</field>
+    <field name="company_id" ref="base.main_company"/>
+    <field name="active" eval="True"/>
+  </record>
+</odoo>

@@ -6,7 +6,7 @@ public static class Seed
 {
     public static async Task Initialize(Store store)
     {
-        await store.Execute("INSERT INTO platform_tenant VALUES('tenant_demo','花栗鼠演示租户') ON CONFLICT DO NOTHING; INSERT INTO platform_organization VALUES('org_demo','tenant_demo','演示机构') ON CONFLICT DO NOTHING; INSERT INTO platform_clinic VALUES('clinic_demo','org_demo','演示门诊') ON CONFLICT DO NOTHING;");
+        await store.Execute("INSERT INTO platform_tenant VALUES('tenant_demo','花栗鼠演示租户') ON CONFLICT DO NOTHING; INSERT INTO platform_organization VALUES('org_demo','tenant_demo','演示机构') ON CONFLICT DO NOTHING; INSERT INTO platform_clinic(id,organization_id,name,tenant_id) VALUES('clinic_demo','org_demo','演示门诊','tenant_demo') ON CONFLICT DO NOTHING;");
         var user = new User("", "tenant_demo", "clinic_demo", "", "");
         if ((await store.List(user, "doctor", true)).Count == 0)
         {
@@ -22,5 +22,6 @@ public static class Seed
                 ["title"] = "花栗鼠演示内容 · " + topic, ["cover"] = "", ["author"] = new JsonObject { ["name"] = "演示账号", ["avatar"] = "" },
                 ["likes"] = 0, ["topic"] = topic, ["content"] = "这是开发演示内容。", ["isDemo"] = true
             }, true, "p_" + topic);
+        await store.Execute("INSERT INTO dso_doctor(id,tenant_id,clinic_id,display_name) SELECT id,tenant_id,clinic_id,body->>'name' FROM platform_resource WHERE kind='doctor' AND owner_id IS NULL ON CONFLICT DO NOTHING");
     }
 }

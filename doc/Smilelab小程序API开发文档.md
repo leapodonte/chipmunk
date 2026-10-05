@@ -178,13 +178,13 @@ await api.post('/ai/simulations', { imageKey: result.objectKey })
 {"taskId":"simulation_<id>","status":"done","progress":100,"qualityChecks":[],"resultText":"开发演示：未进行AI分析，前后图为同一原图。","beforeImage":"<signed-url>","afterImage":"<same-original-signed-url>","isMock":true}
 ```
 
-前后图均指向原图；前端必须展示开发演示标识，不能展示真实诊断或治疗效果。`GET /ai/simulations/mine?page=1` 为本人历史。每日每用户最多20次成功任务创建。生产 AI Gateway、任务队列、质量失败流程与 GPU Worker 待接入。
+前后图均指向原图；前端必须展示开发演示标识，不能展示真实诊断或治疗效果。`GET /ai/simulations/mine?page=1` 为本人历史。每日每用户最多20次成功任务创建。持久化任务队列已实现，内部 jobStatus 支持 queued/running/succeeded/failed/cancelled；真实 AI Gateway 与 GPU Worker 待接入。POST /ai/simulations/{taskId}/cancel 取消未完成任务。
 
 ## 咨询与预留功能
 
 `POST /consultations` 创建本人的咨询记录 `{id,status:"requested"}`，异步写入 Odoo CRM 商业线索。只同步商业标题、平台引用，不传手机号、健康问卷、照片或病历。
 
-以下 GET 路径已提供空数组，方便尚未完成页面联调：`/appointments/mine`、`/patients/me/records`、`/reports/mine`、`/coupons/mine`、`/mall/products`。它们不表示完整业务已实现。`/invitations/mine` 返回 `{inviteCode,invitedCount:0,rewards:[],enabled:false}`。`POST /memberships/open` 返回501，不创建会员或模拟付款。
+预约 `/appointments/mine` 和病历 `/patients/me/records` 已实现真实工作流，详见后面的 DSO 开发文档。以下 GET 路径仍提供空数组：`/reports/mine`、`/coupons/mine`、`/mall/products`。它们不表示完整业务已实现。`/invitations/mine` 返回 `{inviteCode,invitedCount:0,rewards:[],enabled:false}`。`POST /memberships/open` 返回501，不创建会员或模拟付款。
 
 ## Odoo 边界与交付范围
 

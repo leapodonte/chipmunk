@@ -16,6 +16,9 @@ unpackage/
 
 # ---------- Python ----------
 __pycache__/
+test-results/
+playwright-report/
+platform/wwwroot/workspace/
 
 # ---------- 含密钥的本地配置（仓库只提交 *.example.json 模板）----------
 api/Admin.Api/appsettings.json
@@ -31,3 +34,4 @@ docker/redis/opt/*.conf
 # ---------- Docker 离线安装包（大文件，不入库）----------
 docker/docker/*.tgz
 docker/docker/docker-compose
+backend/public/THIRD_PARTY_NOTICES.txt

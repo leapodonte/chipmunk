@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-  <ItemGroup><PackageReference Include="Npgsql" Version="10.0.0" /></ItemGroup>
-  <ItemGroup><Content Include="schema.sql" CopyToOutputDirectory="PreserveNewest" /><Content Include="DeveloperGuide.md" CopyToOutputDirectory="PreserveNewest" /><Content Update="openapi.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Npgsql" Version="10.0.0" /><PackageReference Include="SkiaSharp" Version="4.153.1" /><PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" /></ItemGroup>
+  <ItemGroup><Content Include="schema.sql" CopyToOutputDirectory="PreserveNewest" /><Content Include="migrations/**/*.sql" CopyToOutputDirectory="PreserveNewest" /><Content Include="DeveloperGuide.md" CopyToOutputDirectory="PreserveNewest" /><Content Update="openapi.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Content Include="notices/**/*.txt" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

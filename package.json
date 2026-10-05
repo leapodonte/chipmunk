@@ -1,0 +1,15 @@
+{
+  "name": "smilelab-dso",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "packages/smilelab-client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace backend",
+    "test:ui": "npm run test:e2e --workspace backend"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
