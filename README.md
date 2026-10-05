@@ -53,6 +53,7 @@ python platform/tests/odoo_integration.py
 - [小程序 API 开发文档](doc/Smilelab小程序API开发文档.md)
 - [复用项目、许可与组件决策](doc/DSO复用项目评估与组件决策.md)
 - [容量采样与运行边界](doc/Smilelab_DSO容量与运行边界.md)
+- [交付、SSH 管理与后续计划](doc/Smilelab_DSO交付与后续计划.md)
 - [第三方许可说明](THIRD_PARTY_NOTICES.md)
 
 基础设施由独立 `dcad-infra` 仓库管理 Compose、Caddy、发布与备份；不能直接改服务器配置。部署从已测试的产品提交打包，保存旧数据库、文件、源码及镜像后升级。平台 API 和 Odoo 不发布主机端口，数据库不进入反向代理网络。
