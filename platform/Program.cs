@@ -4,6 +4,13 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 
+if (args is ["--healthcheck"])
+{
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    try { (await client.GetAsync("http://127.0.0.1:8080/health")).EnsureSuccessStatusCode(); }
+    catch { Environment.Exit(1); }
+    return;
+}
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 11 * 1024 * 1024);
 builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = 11 * 1024 * 1024);
@@ -53,7 +60,15 @@ app.MapMethods("/api/v1/{**endpoint}", ["GET", "POST"], async (string endpoint, 
     if (ctx.Request.Method == "POST")
     {
         if (ctx.Request.ContentLength > 65536) throw new ApiError(413, "JSON请求过大", "JSON request exceeds 64 KiB");
-        try { body = (await JsonNode.ParseAsync(ctx.Request.Body))?.AsObject() ?? new(); }
+        using var jsonBuffer = new MemoryStream();
+        var chunk = new byte[8192]; int read;
+        while ((read = await ctx.Request.Body.ReadAsync(chunk, ctx.RequestAborted)) > 0)
+        {
+            if (jsonBuffer.Length + read > 65536) throw new ApiError(413, "JSON请求过大", "JSON request exceeds 64 KiB");
+            await jsonBuffer.WriteAsync(chunk.AsMemory(0, read));
+        }
+        jsonBuffer.Position = 0;
+        try { body = (await JsonNode.ParseAsync(jsonBuffer))?.AsObject() ?? new(); }
         catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException) { throw new ApiError(400, "JSON格式错误", "Invalid JSON object"); }
     }
     var api = new MiniApi(store, config, ctx);

@@ -12,6 +12,8 @@
 | 业务 Base URL | `https://app.smilelab.ai/api/v1` |
 | 健康检查 | `GET https://app.smilelab.ai/health` |
 | OpenAPI 3 文档 | `GET https://app.smilelab.ai/api/openapi.json` |
+| 开发文档入口 | `https://app.smilelab.ai/api/docs` |
+| 中文文档下载 | `https://app.smilelab.ai/api/developer-guide` |
 | Odoo 管理入口 | `https://odoo.smilelab.ai` |
 | 本地磁盘对象 API | 上传凭证返回的 `/storage/objects/{id}` URL |
 
@@ -198,7 +200,7 @@ Odoo 19 Community，独立 PostgreSQL 与数据卷；安装 CRM、Sales、Purcha
 
 本次采用独立 `platform_resource` JSONB 资源表快速实现演示领域，并按租户、门诊、所有者建索引；这是初期开发模型，不是全球设计中所有独立领域库的完成版本。未来拆分应保留稳定平台ID、权限域、对象键与 outbox 协议。
 
-生产前必须补齐真实身份、角色审批、完整临床权限、真实AI、审计保留策略、备份异地副本与恢复演练。当前每日备份脚本提供数据库和文件卷快照，未提供PITR。此环境只使用测试数据。
+生产前必须补齐真实身份、角色审批、完整临床权限、真实AI、审计保留策略与备份异地副本。当前每日备份脚本提供数据库和文件卷快照，已验证数据库恢复和媒体字节哈希，未提供PITR。此环境只使用测试数据。
 
 ## 请求示例
 
