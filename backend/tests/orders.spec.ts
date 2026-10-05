@@ -13,9 +13,10 @@ async function login(page: Page, role: string, account?: string) {
   await expect(page.getByRole('heading', { name: '共享订单', exact: true })).toBeVisible();
 }
 async function act(page: Page, action: string, fill?: (page: Page) => Promise<void>) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
   await page.locator('[data-action="' + action + '"]').click();
   if (fill) await fill(page);
-  await page.getByRole('dialog').getByRole('button', { name: '确认操作', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /^(确认操作|Confirm action)$/ }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.ant-alert-error')).toHaveCount(0);
 }
@@ -49,6 +50,8 @@ test('患者、医生、销售、制造和独立质检共用一笔订单及自�
     await expect(pages.sales!.getByTestId('order-status')).toHaveText('已付款，待销售验证', { timeout: 10000 });
     await act(pages.sales!, 'sales_validate');
     await expect(pages.manufacturer!.locator('[data-action="manufacturer_validate"]')).toBeVisible({ timeout: 10000 });
+    await pages.manufacturer!.setViewportSize({ width: 390, height: 844 });
+    await pages.manufacturer!.getByRole('button', { name: 'English', exact: true }).click();
     await act(pages.manufacturer!, 'manufacturer_validate');
     await act(pages.manufacturer!, 'start_manufacturing', async page => { await page.getByRole('dialog').locator('input').fill('SYNTHETIC-UI-BATCH') });
     await act(pages.manufacturer!, 'finish_manufacturing');
@@ -59,7 +62,7 @@ test('患者、医生、销售、制造和独立质检共用一笔订单及自�
     await expect(patient.locator('[data-action="confirm_delivery"]')).toBeVisible({ timeout: 10000 });
     await act(patient, 'confirm_delivery');
     for (const page of Object.values(pages)) {
-      await expect(page.getByTestId('order-status')).toHaveText('已签收', { timeout: 10000 });
+      await expect(page.getByTestId('order-status')).toHaveText(page === pages.manufacturer ? 'Delivered' : '已签收', { timeout: 10000 });
       await expect(page.locator('.order-timeline li')).toHaveCount(10);
     }
     await expect(pages.sales!.locator('.order-detail')).not.toContainText('Synthetic clinician-approved specification');
